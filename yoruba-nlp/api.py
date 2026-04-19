@@ -1,10 +1,24 @@
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 import json
 
 app = FastAPI(title="Ede API", description="Unified African Language Dataset API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 engine = create_engine("sqlite:///ede.db", echo=False)
+
+@app.get("/app")
+def frontend():
+    return FileResponse("index.html")
 
 @app.get("/")
 def root():

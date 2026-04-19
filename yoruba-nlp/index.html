@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ede</title>
+    <style>
+        body { background: #0a0a0a; color: #e0e0e0; font-family: sans-serif; padding: 40px; }
+        h1 { color: #f5a623; }
+        .stat { background: #111; padding: 20px; margin: 10px; border-radius: 8px; display: inline-block; }
+        .stat-num { font-size: 32px; color: #f5a623; }
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 6px; width: 300px; }
+        button { background: #f5a623; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-left: 8px; }
+        .card { background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; margin: 8px 0; }
+    </style>
+</head>
+<body>
+
+<h1>Ede</h1>
+<p style="color:#666">Unified African Language Infrastructure</p>
+
+<div id="stats" style="margin: 24px 0;"></div>
+
+<div style="margin-bottom: 24px;">
+    <input type="text" id="q" placeholder="Search..." />
+    <button onclick="search()">Search</button>
+</div>
+
+<div id="results"></div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+
+async function loadStats() {
+    const res = await fetch(`${API}/stats`);
+    const data = await res.json();
+    document.getElementById("stats").innerHTML = `
+        <div class="stat"><div class="stat-num">${data.total_entries.toLocaleString()}</div><div>Total Entries</div></div>
+        <div class="stat"><div class="stat-num">${Object.keys(data.languages).length}</div><div>Languages</div></div>
+        <div class="stat"><div class="stat-num">${Object.keys(data.domains).length}</div><div>Domains</div></div>
+    `;
+}
+
+async function search() {
+    const q = document.getElementById("q").value.trim();
+    if (!q) return;
+    const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&limit=20`);
+    const data = await res.json();
+    document.getElementById("results").innerHTML = data.results.length === 0
+        ? "<p style='color:#666'>No results found</p>"
+        : data.results.map(r => `
+            <div class="card">
+                <div style="color:#f5a623;font-size:12px">${r.source_language}</div>
+                <div style="font-size:16px;margin-bottom:8px">${r.source_text}</div>
+                <div style="color:#f5a623;font-size:12px">${r.target_language}</div>
+                <div style="font-size:16px;margin-bottom:8px">${r.target_text}</div>
+                <div style="color:#666;font-size:12px">📂 ${r.domain} · 🔗 ${r.sources.join(", ")}</div>
+            </div>
+        `).join("");
+}
+
+document.getElementById("q").addEventListener("keypress", e => {
+    if (e.key === "Enter") search();
+});
+
+loadStats();
+</script>
+</body>
+</html>
