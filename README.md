@@ -47,7 +47,10 @@ Every entry in Ede knows where it came from, how many native speakers verified i
 - Add Xhosa (Southern Africa) — in progress
 - Add Igbo datasets
 - Add Hausa datasets
-- Native speaker verification layer
+- **Preserve tonal marks and context-specific meanings in all language data**
+- Native speaker verification layer with confidence voting
+- Multilingual word sense inventory — search one English word, get results in all 4+ languages with synonyms, homonyms, contexts
+- Multilingual translation hub — one English input, simultaneous output in N African languages (text + voice)
 - Postgres migration for production
 - Expand to 20+ African languages
 - Community contributor portal
