@@ -27,9 +27,11 @@ def merge_datasets(*filenames):
     return all_entries, duplicates
 
 merged, duplicates = merge_datasets(
-    "ede_yoruba_0xnu.json",
-    "ede_yoruba_helsinki.json",
-    "ede_yoruba_menyo.json"
+    "data/yoruba/ede_yoruba_0xnu.json",
+    "data/yoruba/ede_yoruba_helsinki.json",
+    "data/yoruba/ede_yoruba_menyo.json",
+    "data/swahili/ede_swahili.json",
+    "data/tamazight/ede_tamazight.json"
 )
 
 with open("ede_master.json", "w", encoding="utf-8") as f:
