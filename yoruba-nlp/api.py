@@ -1,8 +1,7 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
+from datetime import date
 import json
 
 app = FastAPI(title="Ede API", description="Unified African Language Dataset API")
@@ -14,78 +13,107 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-engine = create_engine("sqlite:///ede.db", echo=False)
+# Load word sense data at startup
+try:
+    with open("ede_word_sense.json", "r", encoding="utf-8") as f:
+        word_sense_db = json.load(f)
+except FileNotFoundError:
+    print("Warning: ede_word_sense.json not found.")
+    word_sense_db = {}
 
 @app.get("/app")
 def frontend():
     return FileResponse("index.html")
 
 @app.get("/")
-def root():
-    return {
-        "name": "Ede",
-        "description": "Unified African Language Dataset API",
-        "version": "0.1.0",
-        "entries": 132880
-    }
-
-@app.get("/search")
-def search(
-    q: str = Query(..., description="Search term"),
-    source_language: str = Query(None, description="Filter by source language"),
-    target_language: str = Query(None, description="Filter by target language"),
-    domain: str = Query(None, description="Filter by domain"),
-    limit: int = Query(10, description="Number of results")
-):
-    with Session(engine) as session:
-        sql = "SELECT * FROM entries WHERE (source_text LIKE :q OR target_text LIKE :q)"
-        params = {"q": f"%{q}%"}
-
-        if source_language:
-            sql += " AND source_language = :source_language"
-            params["source_language"] = source_language
-
-        if target_language:
-            sql += " AND target_language = :target_language"
-            params["target_language"] = target_language
-
-        if domain:
-            sql += " AND domain = :domain"
-            params["domain"] = domain
-
-        sql += " LIMIT :limit"
-        params["limit"] = limit
-
-        results = session.execute(text(sql), params).fetchall()
-
-        return {
-            "query": q,
-            "count": len(results),
-            "results": [
-                {
-                    "id": r[0],
-                    "source_language": r[1],
-                    "source_text": r[2],
-                    "target_language": r[3],
-                    "target_text": r[4],
-                    "domain": r[8],
-                    "sources": json.loads(r[9]),
-                    "verified_by": r[10],
-                    "verification_score": r[11]
-                }
-                for r in results
-            ]
-        }
+def frontend_root():
+    return FileResponse("index.html")
 
 @app.get("/stats")
 def stats():
-    with Session(engine) as session:
-        total = session.execute(text("SELECT COUNT(*) FROM entries")).scalar()
-        domains = session.execute(text("SELECT domain, COUNT(*) FROM entries GROUP BY domain")).fetchall()
-        languages = session.execute(text("SELECT target_language, COUNT(*) FROM entries GROUP BY target_language")).fetchall()
-
-        return {
-            "total_entries": total,
-            "domains": {d[0]: d[1] for d in domains},
-            "languages": {l[0]: l[1] for l in languages}
+    return {
+        "total_entries": 1693776,
+        "domains": {
+            "conversational": 121311,
+            "multi-domain": 9991,
+            "software-ui": 1578,
+            "general": 1560196
+        },
+        "languages": {
+            "Yoruba": 132880,
+            "Swahili": 563294,
+            "Xhosa": 993668,
+            "Tamazight": 6194
         }
+    }
+
+@app.get("/word-sense")
+def word_sense(word: str = Query(..., description="English word to look up")):
+    word_clean = word.lower().strip()
+    
+    if word_clean not in word_sense_db:
+        return {
+            "word": word,
+            "found": False,
+            "translations": [],
+            "missing_languages": ["Yoruba", "Swahili", "Xhosa", "Tamazight"],
+            "message": "Word not found in our high-confidence set. Help us translate it!"
+        }
+    
+    entry = word_sense_db[word_clean]
+    
+    # Expand short keys back to full format for frontend
+    translations = []
+    for trans in entry.get("t", []):
+        translations.append({
+            "language": trans["l"],
+            "word": trans["w"],
+            "confidence": trans["c"],
+            "frequency": trans["f"]
+        })
+    
+    translations = sorted(translations, key=lambda x: x["confidence"], reverse=True)
+    
+    # Find which languages have this word
+    languages_with_translation = {t["language"] for t in translations}
+    all_languages = ["Yoruba", "Swahili", "Xhosa", "Tamazight"]
+    missing_languages = [l for l in all_languages if l not in languages_with_translation]
+    
+    return {
+        "word": entry["word"],
+        "language": "English",
+        "found": True,
+        "total_translations": len(translations),
+        "translations": translations,
+        "missing_languages": missing_languages,
+        "contribution_needed": len(missing_languages) > 0
+    }
+
+@app.post("/contribute")
+def contribute(word: str = Query(...), language: str = Query(...), translation: str = Query(...)):
+    """User submits a missing translation"""
+    contribution = {
+        "word": word.lower().strip(),
+        "language": language,
+        "translation": translation.strip(),
+        "timestamp": str(date.today())
+    }
+    
+    # Load existing contributions
+    try:
+        with open("contributions.json", "r", encoding="utf-8") as f:
+            contributions = json.load(f)
+    except FileNotFoundError:
+        contributions = []
+    
+    # Add new contribution
+    contributions.append(contribution)
+    
+    # Save
+    with open("contributions.json", "w", encoding="utf-8") as f:
+        json.dump(contributions, f, ensure_ascii=False, indent=2)
+    
+    return {
+        "status": "received",
+        "message": f"Thank you! Your translation '{translation}' for '{word}' in {language} has been submitted."
+    }
