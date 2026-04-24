@@ -1,5 +1,6 @@
 # Ede 🌍
 > *Ede (èdè) means "language" in Yoruba*
+> *Current website: https://huggingface.co/spaces/jaskay/ede-african-nlp*
 
 Unified, verified, living corpus infrastructure for African languages.
 
