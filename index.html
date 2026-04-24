@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ede - African Language Infrastructure</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { 
+            color: #f5a623;
+            margin-bottom: 10px;
+            font-size: 48px;
+        }
+        .subtitle { color: #999; margin-bottom: 30px; font-size: 16px; }
+        .stats { 
+            display: flex;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: rgba(255, 165, 35, 0.1);
+            border: 1px solid #f5a623;
+            padding: 15px 25px;
+            border-radius: 8px;
+            flex: 1;
+            min-width: 150px;
+        }
+        .stat-number { 
+            color: #f5a623;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .stat-label { 
+            color: #999;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 40px;
+        }
+        input {
+            flex: 1;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        input:focus { outline: none; border-color: #f5a623; }
+        button {
+            background: #f5a623;
+            border: none;
+            color: #000;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background: #e6961a; }
+        .word-card {
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .word-title {
+            font-size: 36px;
+            color: #f5a623;
+            margin-bottom: 20px;
+        }
+        .translations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .translation-item {
+            background: rgba(245, 166, 35, 0.05);
+            border: 1px solid #f5a623;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .translation-lang {
+            color: #f5a623;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .translation-word {
+            font-size: 20px;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .confidence {
+            display: inline-block;
+            background: #27ae60;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-right: 8px;
+        }
+        .frequency {
+            display: inline-block;
+            color: #999;
+            font-size: 11px;
+        }
+        .missing-section {
+            background: rgba(230, 126, 34, 0.1);
+            border: 1px solid #e67e22;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        .missing-title {
+            color: #e67e22;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .missing-languages {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .missing-lang {
+            background: #e67e22;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+        .contribute-btn {
+            background: #e67e22;
+            margin-top: 15px;
+            display: inline-block;
+        }
+        .contribute-btn:hover { background: #d35400; }
+        .loading { color: #999; padding: 40px; text-align: center; }
+        .error { color: #e74c3c; padding: 20px; }
+        .not-found {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        .modal-content {
+            background-color: #1a1a2e;
+            margin: 10% auto;
+            padding: 30px;
+            border: 1px solid #333;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            color: #e0e0e0;
+        }
+        .close {
+            color: #999;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover { color: #f5a623; }
+        .modal input, .modal select {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #0a0a0a;
+            color: #fff;
+        }
+        .modal-title {
+            color: #f5a623;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        .submit-btn {
+            width: 100%;
+            background: #e67e22;
+            padding: 12px;
+        }
+        .success-msg {
+            color: #27ae60;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Ede</h1>
+    <p class="subtitle">Unified African Language Infrastructure</p>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="search-box">
+        <input type="text" id="word" placeholder="Search an English word..." />
+        <button onclick="searchWord()">Search</button>
+    </div>
+
+    <div id="results"></div>
+</div>
+
+<!-- Contribution Modal -->
+<div id="contributionModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="modal-title">Help us translate</div>
+        <input type="hidden" id="modalWord" />
+        <input type="text" id="modalLanguage" placeholder="Language" readonly />
+        <input type="text" id="modalTranslation" placeholder="Translation" />
+        <button class="submit-btn" onclick="submitContribution()">Submit Translation</button>
+        <div id="successMsg"></div>
+    </div>
+</div>
+
+<script>
+const API = "";
+let currentWord = "";
+let currentLanguage = "";
+
+async function loadStats() {
+    try {
+        const res = await fetch(`${API}/stats`);
+        const data = await res.json();
+        document.getElementById("stats").innerHTML = `
+            <div class="stat-card">
+                <div class="stat-number">${data.total_entries.toLocaleString()}</div>
+                <div class="stat-label">Total Entries</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">${Object.keys(data.languages).length}</div>
+                <div class="stat-label">Languages</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">${Object.keys(data.domains).length}</div>
+                <div class="stat-label">Domains</div>
+            </div>
+        `;
+    } catch (err) {
+        console.error("Stats error:", err);
+    }
+}
+
+async function searchWord() {
+    const word = document.getElementById("word").value.trim();
+    if (!word) return;
+
+    document.getElementById("results").innerHTML = '<div class="loading">Searching...</div>';
+
+    try {
+        const res = await fetch(`${API}/word-sense?word=${encodeURIComponent(word)}`);
+        const data = await res.json();
+
+        if (!data.found) {
+            document.getElementById("results").innerHTML = `
+                <div class="word-card">
+                    <div class="not-found">
+                        <p style="font-size: 18px; margin-bottom: 15px;">No translations found for "<strong>${word}</strong>"</p>
+                        <p style="color: #666; margin-bottom: 20px;">Help us build Ede by contributing translations!</p>
+                        <button class="contribute-btn" onclick="openContributionModal('${word}', 'Yoruba')">Contribute Translation</button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = `
+            <div class="word-card">
+                <div class="word-title">${data.word}</div>
+                <div class="translations-grid">
+        `;
+
+        for (const trans of data.translations) {
+            html += `
+                <div class="translation-item">
+                    <div class="translation-lang">${trans.language}</div>
+                    <div class="translation-word">${trans.word}</div>
+                    <div>
+                        <span class="confidence">High</span>
+                        <span class="frequency">${trans.frequency} match${trans.frequency > 1 ? 'es' : ''}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        if (data.contribution_needed) {
+            html += `
+                <div class="missing-section">
+                    <div class="missing-title">🌍 Help complete this word</div>
+                    <p style="margin-bottom: 15px; color: #ddd;">We need translations in:</p>
+                    <div class="missing-languages">
+            `;
+            for (const lang of data.missing_languages) {
+                html += `
+                    <button class="missing-lang" onclick="openContributionModal('${word}', '${lang}')" style="background: #e67e22; border: none; cursor: pointer; padding: 8px 16px; border-radius: 20px; color: white;">
+                        + ${lang}
+                    </button>
+                `;
+            }
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        document.getElementById("results").innerHTML = html;
+    } catch (err) {
+        document.getElementById("results").innerHTML = `<div class="error">Error: ${err.message}</div>`;
+    }
+}
+
+function openContributionModal(word, language) {
+    currentWord = word;
+    currentLanguage = language;
+    document.getElementById("modalWord").value = word;
+    document.getElementById("modalLanguage").value = language;
+    document.getElementById("modalTranslation").value = "";
+    document.getElementById("successMsg").innerHTML = "";
+    document.getElementById("contributionModal").style.display = "block";
+}
+
+function closeModal() {
+    document.getElementById("contributionModal").style.display = "none";
+}
+
+async function submitContribution() {
+    const translation = document.getElementById("modalTranslation").value.trim();
+    if (!translation) {
+        alert("Please enter a translation");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API}/contribute?word=${encodeURIComponent(currentWord)}&language=${encodeURIComponent(currentLanguage)}&translation=${encodeURIComponent(translation)}`, {
+            method: "POST"
+        });
+        const data = await res.json();
+        
+        document.getElementById("successMsg").innerHTML = `<div class="success-msg">${data.message}</div>`;
+        setTimeout(() => closeModal(), 2000);
+    } catch (err) {
+        alert("Error submitting translation: " + err.message);
+    }
+}
+
+document.getElementById("word").addEventListener("keypress", e => {
+    if (e.key === "Enter") searchWord();
+});
+
+window.onclick = function(event) {
+    const modal = document.getElementById("contributionModal");
+    if (event.target === modal) {
+        modal.style.display = "none";
+    }
+}
+
+loadStats();
+</script>
+</body>
+</html>
