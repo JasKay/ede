@@ -17,21 +17,29 @@ contributions = {}
 async def load_data():
     global yoruba_rich, word_sense_db, contributions
     
-    print("Loading ede_yoruba_rich.json...")
+    print("Loading datasets...")
+    
+    # Try to load rich Yoruba data (may not exist on HF Spaces)
     try:
         with open("ede_yoruba_rich.json", "r", encoding="utf-8") as f:
             yoruba_rich = json.load(f)
-        print(f"Loaded {len(yoruba_rich)} Yoruba phrases")
+        print(f"Loaded {len(yoruba_rich)} Yoruba phrases (rich)")
     except FileNotFoundError:
-        print("ede_yoruba_rich.json not found")
+        print("ede_yoruba_rich.json not found, will fall back to word_sense")
+        yoruba_rich = {}
     
-    print("Loading ede_word_sense.json...")
+    # Load word sense (always available)
     try:
         with open("ede_word_sense.json", "r", encoding="utf-8") as f:
             word_sense_db = json.load(f)
         print(f"Loaded {len(word_sense_db)} word sense entries")
     except FileNotFoundError:
         print("ede_word_sense.json not found")
+    
+    # If rich not available, use word_sense as fallback
+    if not yoruba_rich and word_sense_db:
+        yoruba_rich = word_sense_db
+        print("Using word_sense as fallback for searches")
     
     print("Loading contributions.json...")
     try:
