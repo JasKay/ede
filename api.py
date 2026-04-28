@@ -90,7 +90,7 @@ def stats():
         return {"error": str(e), "contributions": 0}
 
 @app.get("/search-suggestions")
-def search_suggestions(q: str, limit: int = 5):
+def search_suggestions(q: str, limit: int = 3):
     q_lower = q.lower().strip()
     
     if not q_lower or len(q_lower) < 2:
@@ -123,16 +123,24 @@ def word_sense(word: str):
         return {"found": False, "error": "No word provided"}
     
     try:
-        all_definitions = []
-        found_languages = []
+        results = {
+            "Yoruba": [],
+            "Swahili": [],
+            "Xhosa": [],
+            "Tamazight": []
+        }
         
-        # Search all 4 languages (rich datasets)
-        for lang_data, lang_name in [
-            (yoruba_rich, "Yoruba"),
-            (swahili_rich, "Swahili"),
-            (xhosa_rich, "Xhosa"),
-            (tamazight_rich, "Tamazight")
-        ]:
+        # Search all 4 languages
+        lang_map = {
+            "Yoruba": yoruba_rich,
+            "Swahili": swahili_rich,
+            "Xhosa": xhosa_rich,
+            "Tamazight": tamazight_rich
+        }
+        
+        found_any = False
+        
+        for lang_name, lang_data in lang_map.items():
             if not lang_data:
                 continue
             
@@ -143,85 +151,41 @@ def word_sense(word: str):
                     for d in definitions:
                         if "language" not in d:
                             d["language"] = lang_name
-                    all_definitions.extend(definitions)
-                    found_languages.append(lang_name)
+                    results[lang_name].extend(definitions)
+                    found_any = True
         
-        # If found in any language
-        if all_definitions:
-            return {
-                "found": True,
-                "type": "exact",
-                "word": word_lower,
-                "definitions": all_definitions,
-                "found_in": found_languages
-            }
-        
-        # Fallback: check word_sense (for HF Spaces)
-        if word_sense_db and word_lower in word_sense_db:
+        # Fallback to word_sense for HF Spaces
+        if not found_any and word_sense_db and word_lower in word_sense_db:
             word_data = word_sense_db[word_lower]
-            definitions = [{
-                "id": f"{word_lower}_001",
-                "definition": word,
-                "part_of_speech": "word",
-                "translations": [
-                    {
-                        "language": item["l"],
-                        "word": item["w"],
-                        "confidence": item.get("c", 0.8),
-                        "frequency": item.get("f", 1),
-                        "domain": "general",
-                        "intent": "informing",
-                        "expression_mode": "literal",
-                        "formality": "neutral",
-                        "code_switching": False,
-                        "synonyms": [],
-                        "context": ["general"],
-                        "example": word,
-                        "sources": []
-                    }
-                    for item in word_data.get("t", [])
-                ],
-                "sources": []
-            }]
+            for item in word_data.get("t", []):
+                lang = item["l"]
+                if lang in results:
+                    results[lang].append({
+                        "id": f"{word_lower}_001",
+                        "definition": word,
+                        "translations": [{
+                            "language": lang,
+                            "word": item["w"],
+                            "confidence": item.get("c", 0.8),
+                            "frequency": item.get("f", 1),
+                            "domain": "general"
+                        }]
+                    })
+                    found_any = True
+        
+        if found_any:
             return {
                 "found": True,
                 "type": "exact",
                 "word": word_lower,
-                "definitions": definitions,
-                "found_in": [t["language"] for t in definitions[0]["translations"]]
+                "results": results
             }
         
-        # PHRASE MATCH across all languages
-        phrase_matches = []
-        for lang_data, lang_name in [
-            (yoruba_rich, "Yoruba"),
-            (swahili_rich, "Swahili"),
-            (xhosa_rich, "Xhosa"),
-            (tamazight_rich, "Tamazight")
-        ]:
-            if not lang_data:
-                continue
-            for phrase, data in lang_data.items():
-                if word_lower in phrase.lower():
-                    translations = data.get("definitions", [{}])[0].get("translations", [])
-                    phrase_matches.append({
-                        "phrase": phrase,
-                        "language": lang_name,
-                        "translations": translations
-                    })
-        
-        if phrase_matches:
-            phrase_matches.sort(key=lambda x: len(x["phrase"]))
-            return {
-                "found": True,
-                "type": "phrase_match",
-                "word": word,
-                "matches": phrase_matches[:10]
-            }
-        
+        # Not found - return empty results for all languages
         return {
             "found": False,
             "word": word,
+            "results": results,
             "contribution_needed": True,
             "missing_languages": ["Yoruba", "Swahili", "Xhosa", "Tamazight"]
         }

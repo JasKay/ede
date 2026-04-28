@@ -655,7 +655,7 @@ async function searchWord() {
         const res = await fetch(`${API}/word-sense?word=${encodeURIComponent(word)}`);
         const data = await res.json();
 
-        if (!data.found) {
+        if (data.found === false && !data.results) {
             document.getElementById("results").innerHTML = `
                 <div class="word-card">
                     <div class="not-found">
@@ -668,62 +668,42 @@ async function searchWord() {
             return;
         }
 
-        if (data.type === "exact") {
-            let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
+        // Show all 4 languages
+        let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
+        html += `<div class="translations-grid">`;
+
+        const languages = ["Yoruba", "Swahili", "Xhosa", "Tamazight"];
+        
+        for (const lang of languages) {
+            const translations = data.results[lang] || [];
             
-            if (data.found_in && data.found_in.length > 0) {
-                html += `<div style="margin-bottom: 16px;">`;
-                for (const lang of data.found_in) {
-                    html += `<span class="language-badge">${lang}</span>`;
+            if (translations.length > 0) {
+                // Has translations
+                for (const definition of translations) {
+                    for (const trans of definition.translations || []) {
+                        html += `
+                            <div class="translation-card">
+                                <div class="translation-lang">✓ ${trans.language}</div>
+                                <div class="translation-word">${trans.word}</div>
+                                <div class="translation-meta">${trans.domain || 'general'}</div>
+                            </div>
+                        `;
+                    }
                 }
-                html += `</div>`;
-            }
-            
-            html += `<div class="translations-grid">`;
-
-            for (const definition of data.definitions) {
-                for (const trans of definition.translations) {
-                    html += `
-                        <div class="translation-card">
-                            <div class="translation-lang">${trans.language}</div>
-                            <div class="translation-word">${trans.word}</div>
-                            <div class="translation-meta">${trans.domain || 'general'}</div>
-                        </div>
-                    `;
-                }
-            }
-
-            html += `</div></div>`;
-            document.getElementById("results").innerHTML = html;
-            return;
-        }
-
-        if (data.type === "phrase_match") {
-            let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
-            html += `<div class="phrase-matches-section"><div class="phrase-title">Found in phrases</div>`;
-
-            for (const match of data.matches.slice(0, 5)) {
+            } else {
+                // Missing translation
                 html += `
-                    <div class="phrase-item">
-                        <div style="color: var(--text-secondary); font-size: 11px; margin-bottom: 4px;">${match.language}</div>
-                        <div class="phrase-text">"${match.phrase}"</div>
-                        <div class="phrase-translation">→ ${match.translations.map(t => t.word).join(', ')}</div>
+                    <div class="translation-card" style="background: rgba(200, 100, 50, 0.08); border-color: rgba(230, 126, 34, 0.3); opacity: 0.7;">
+                        <div class="translation-lang">✕ ${lang}</div>
+                        <div class="translation-word" style="color: var(--text-secondary); font-size: 14px;">Not in database</div>
+                        <button class="translation-meta" style="background: var(--accent-warm); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 8px;" onclick="openContributionModal('${word}', '${lang}')">+ Add</button>
                     </div>
                 `;
             }
-
-            html += `</div>`;
-            html += `
-                <div class="contribute-section">
-                    <div class="contribute-title">Looking for the exact word?</div>
-                    <div class="contribute-text">Help us add "${word}" directly to Ede</div>
-                    <button class="contribute-btn" onclick="openContributionModal('${word}')">+ Add Translation</button>
-                </div>
-            `;
-            html += `</div>`;
-            document.getElementById("results").innerHTML = html;
-            return;
         }
+
+        html += `</div></div>`;
+        document.getElementById("results").innerHTML = html;
 
     } catch (err) {
         document.getElementById("results").innerHTML = `<div style="color: #e74c3c; padding: 20px; text-align: center;">Error: ${err.message}</div>`;
