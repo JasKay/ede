@@ -111,23 +111,68 @@ def word_sense(word: str):
         return {"found": False, "error": "No word provided"}
     
     try:
-        # EXACT MATCH FIRST
+        # EXACT MATCH FIRST - try rich first, then word_sense
         if word_lower in yoruba_rich:
             word_data = yoruba_rich[word_lower]
-            return {
-                "found": True,
-                "type": "exact",
-                "word": word_data["word"],
-                "definitions": word_data.get("definitions", [])
-            }
+            
+            # Handle both formats
+            if "definitions" in word_data:
+                # Rich format
+                return {
+                    "found": True,
+                    "type": "exact",
+                    "word": word_data["word"],
+                    "definitions": word_data.get("definitions", [])
+                }
+            elif "t" in word_data:
+                # Word sense format - transform to rich
+                definitions = [{
+                    "id": f"{word_lower}_001",
+                    "definition": word,
+                    "part_of_speech": "word",
+                    "translations": [
+                        {
+                            "language": item["l"],
+                            "word": item["w"],
+                            "confidence": item.get("c", 0.8),
+                            "frequency": item.get("f", 1),
+                            "domain": "general",
+                            "intent": "informing",
+                            "expression_mode": "literal",
+                            "formality": "neutral",
+                            "code_switching": False,
+                            "synonyms": [],
+                            "context": ["general"],
+                            "example": word,
+                            "sources": []
+                        }
+                        for item in word_data.get("t", [])
+                    ],
+                    "sources": []
+                }]
+                
+                return {
+                    "found": True,
+                    "type": "exact",
+                    "word": word_data["word"],
+                    "definitions": definitions
+                }
         
-        # PHRASE MATCH - Find phrases containing the word
+        # PHRASE MATCH
         phrase_matches = []
         for phrase, data in yoruba_rich.items():
             if word_lower in phrase.lower():
+                # Handle both formats
+                if "definitions" in data:
+                    translations = data.get("definitions", [{}])[0].get("translations", [])
+                elif "t" in data:
+                    translations = [{"word": item["w"], "language": item["l"]} for item in data.get("t", [])]
+                else:
+                    translations = []
+                
                 phrase_matches.append({
                     "phrase": phrase,
-                    "translations": data.get("definitions", [{}])[0].get("translations", [])
+                    "translations": translations
                 })
         
         if phrase_matches:
@@ -141,7 +186,6 @@ def word_sense(word: str):
                 "matches": phrase_matches[:10]
             }
         
-        # NOT FOUND
         return {
             "found": False,
             "word": word,
@@ -151,6 +195,7 @@ def word_sense(word: str):
     
     except Exception as e:
         return {"found": False, "error": str(e)}
+
 
 @app.post("/contribute")
 def contribute(word: str, language: str, translation: str, username: str = "Anonymous"):
