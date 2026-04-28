@@ -185,6 +185,17 @@
             word-break: break-word;
         }
         
+        .language-badge {
+            display: inline-block;
+            background: rgba(39, 174, 96, 0.2);
+            color: var(--accent-success);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        
         .translations-grid {
             display: grid;
             gap: 12px;
@@ -494,7 +505,7 @@
     <div class="search-container">
         <div class="search-wrapper">
             <div style="position: relative; flex: 1;">
-                <input type="text" id="word" placeholder="Search a word or phrase..." onkeyup="showSuggestions()" />
+                <input type="text" id="word" placeholder="Search in any language..." onkeyup="showSuggestions()" />
                 <div id="suggestions" class="suggestions-container"></div>
             </div>
             <button class="search-btn" onclick="searchWord()">Search</button>
@@ -658,7 +669,17 @@ async function searchWord() {
         }
 
         if (data.type === "exact") {
-            let html = `<div class="word-card"><div class="word-title">${data.word}</div><div class="translations-grid">`;
+            let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
+            
+            if (data.found_in && data.found_in.length > 0) {
+                html += `<div style="margin-bottom: 16px;">`;
+                for (const lang of data.found_in) {
+                    html += `<span class="language-badge">${lang}</span>`;
+                }
+                html += `</div>`;
+            }
+            
+            html += `<div class="translations-grid">`;
 
             for (const definition of data.definitions) {
                 for (const trans of definition.translations) {
@@ -666,7 +687,7 @@ async function searchWord() {
                         <div class="translation-card">
                             <div class="translation-lang">${trans.language}</div>
                             <div class="translation-word">${trans.word}</div>
-                            <div class="translation-meta">${trans.domain}</div>
+                            <div class="translation-meta">${trans.domain || 'general'}</div>
                         </div>
                     `;
                 }
@@ -683,7 +704,8 @@ async function searchWord() {
 
             for (const match of data.matches.slice(0, 5)) {
                 html += `
-                    <div class="phrase-item" onclick="searchWord()" style="cursor: default;">
+                    <div class="phrase-item">
+                        <div style="color: var(--text-secondary); font-size: 11px; margin-bottom: 4px;">${match.language}</div>
                         <div class="phrase-text">"${match.phrase}"</div>
                         <div class="phrase-translation">→ ${match.translations.map(t => t.word).join(', ')}</div>
                     </div>
