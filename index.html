@@ -3,255 +3,502 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ede - African Language Infrastructure</title>
+    <title>Ede — African Language Infrastructure</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        
+        :root {
+            --primary: #f5a623;
+            --dark-bg: #0a0a0a;
+            --card-bg: #1a1a2e;
+            --border: #333;
+            --text-main: #e0e0e0;
+            --text-secondary: #999;
+            --accent-warm: #e67e22;
+            --accent-success: #27ae60;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #1a1a2e 100%);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
             padding: 20px;
             min-height: 100vh;
-            padding-bottom: 100px;
+            padding-bottom: 120px;
         }
-        .container { max-width: 600px; margin: 0 auto; }
-        h1 { 
-            color: #f5a623;
-            margin-bottom: 5px;
-            font-size: 32px;
+        
+        .container { 
+            max-width: 700px; 
+            margin: 0 auto;
         }
-        .subtitle { color: #999; margin-bottom: 20px; font-size: 13px; }
-        .search-box {
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-top: 20px;
+        }
+        
+        h1 {
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -1px;
+            margin-bottom: 8px;
+        }
+        
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        
+        .search-container {
+            position: relative;
+            margin-bottom: 40px;
+        }
+        
+        .search-wrapper {
             display: flex;
-            gap: 8px;
-            margin-bottom: 30px;
+            gap: 12px;
+            position: relative;
+            z-index: 100;
         }
+        
         input {
             flex: 1;
-            background: #1a1a2e;
-            border: 1px solid #333;
-            color: #fff;
-            padding: 12px 14px;
-            border-radius: 6px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 14px 16px;
+            border-radius: 8px;
             font-size: 16px;
+            transition: all 0.2s ease;
         }
-        input:focus { outline: none; border-color: #f5a623; }
-        button {
-            background: #f5a623;
+        
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.1);
+        }
+        
+        input::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .search-btn {
+            background: var(--primary);
             border: none;
             color: #000;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-weight: bold;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
             font-size: 14px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
-        button:hover { background: #e6961a; }
+        
+        .search-btn:hover {
+            background: #e6961a;
+            transform: translateY(-1px);
+        }
+        
+        .search-btn:active {
+            transform: translateY(0);
+        }
+        
+        .suggestions-container {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 52px;
+            margin-top: 8px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 280px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        .suggestion-item {
+            padding: 12px 16px;
+            color: var(--text-main);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: all 0.15s ease;
+            font-size: 14px;
+        }
+        
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+        
+        .suggestion-item:hover {
+            background: rgba(245, 166, 35, 0.1);
+            padding-left: 20px;
+            color: var(--primary);
+        }
+        
+        .results-section {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .loading, .not-found {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+        
+        .loading {
+            font-size: 14px;
+        }
+        
         .word-card {
-            background: #1a1a2e;
-            border: 1px solid #333;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 20px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .word-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 24px;
+            word-break: break-word;
+        }
+        
+        .translations-grid {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        
+        .translation-card {
+            background: rgba(245, 166, 35, 0.05);
+            border: 1px solid rgba(245, 166, 35, 0.3);
+            padding: 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .translation-card:hover {
+            background: rgba(245, 166, 35, 0.1);
+            border-color: var(--primary);
+            transform: translateX(4px);
+        }
+        
+        .translation-lang {
+            color: var(--primary);
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        
+        .translation-word {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+        
+        .translation-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .phrase-matches-section {
+            background: rgba(230, 126, 34, 0.08);
+            border: 1px solid rgba(230, 126, 34, 0.3);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
         }
-        .word-title {
-            font-size: 24px;
-            color: #f5a623;
-            margin-bottom: 15px;
-        }
-        .translations-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .translation-item {
-            background: rgba(245, 166, 35, 0.05);
-            border: 1px solid #f5a623;
-            padding: 12px;
-            border-radius: 8px;
-        }
-        .translation-lang {
-            color: #f5a623;
-            font-size: 11px;
+        
+        .phrase-title {
+            color: var(--accent-warm);
+            font-size: 13px;
+            font-weight: 600;
             text-transform: uppercase;
-            margin-bottom: 4px;
+            margin-bottom: 16px;
+            letter-spacing: 0.5px;
         }
-        .translation-word {
-            font-size: 18px;
-            color: #fff;
-            margin-bottom: 6px;
-        }
-        .definition-box {
-            background: rgba(230, 126, 34, 0.1);
-            border: 1px solid #e67e22;
+        
+        .phrase-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 14px;
             border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
-        .definition-text {
-            color: #ddd;
-            margin-bottom: 12px;
+        
+        .phrase-item:hover {
+            border-color: var(--primary);
+            background: rgba(245, 166, 35, 0.05);
+        }
+        
+        .phrase-text {
+            color: var(--text-main);
             font-size: 14px;
-            font-style: italic;
+            margin-bottom: 8px;
+            font-weight: 500;
         }
-        .missing-section {
+        
+        .phrase-translation {
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .contribute-section {
             background: rgba(230, 126, 34, 0.1);
-            border: 1px solid #e67e22;
-            border-radius: 8px;
-            padding: 15px;
+            border: 1px solid var(--accent-warm);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
             margin-top: 20px;
         }
-        .missing-title {
-            color: #e67e22;
-            font-weight: bold;
+        
+        .contribute-title {
+            color: var(--text-main);
+            font-size: 16px;
+            font-weight: 600;
             margin-bottom: 12px;
-            font-size: 14px;
         }
-        .missing-languages {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+        
+        .contribute-text {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 16px;
         }
-        .missing-lang {
-            background: #e67e22;
-            color: #fff;
-            padding: 8px 14px;
-            border-radius: 16px;
-            font-size: 12px;
-            border: none;
-            cursor: pointer;
-        }
-        .missing-lang:active {
-            background: #d35400;
-        }
+        
         .contribute-btn {
-            background: #e67e22;
-            margin-top: 15px;
-            width: 100%;
-            padding: 14px;
+            background: var(--accent-warm);
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
             font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
-        .loading { color: #999; padding: 30px; text-align: center; font-size: 14px; }
-        .error { color: #e74c3c; padding: 20px; font-size: 14px; }
-        .not-found {
-            text-align: center;
-            padding: 30px;
-            color: #999;
+        
+        .contribute-btn:hover {
+            background: #d35400;
+            transform: translateY(-2px);
         }
+        
         .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 2000;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(2px);
         }
+        
         .modal-content {
-            background-color: #1a1a2e;
+            background-color: var(--card-bg);
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px;
-            border: 1px solid #333;
-            border-radius: 12px;
-            width: 85%;
+            padding: 32px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 90%;
             max-width: 450px;
-            color: #e0e0e0;
-            z-index: 1001;
+            color: var(--text-main);
+            z-index: 2001;
+            max-height: 90vh;
+            overflow-y: auto;
         }
+        
         .close {
-            color: #999;
+            color: var(--text-secondary);
             float: right;
-            font-size: 24px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 300;
             cursor: pointer;
+            line-height: 1;
         }
-        .close:active { color: #f5a623; }
-        .modal input, .modal select {
-            width: 100%;
-            margin-bottom: 12px;
-            padding: 10px;
-            border: 1px solid #333;
-            border-radius: 6px;
-            background: #0a0a0a;
-            color: #fff;
-            font-size: 14px;
+        
+        .close:hover {
+            color: var(--primary);
         }
-        .modal-title {
-            color: #f5a623;
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        .submit-btn {
-            width: 100%;
-            background: #e67e22;
-            padding: 12px;
-            font-size: 14px;
-        }
-        .success-msg {
-            color: #27ae60;
-            margin-top: 10px;
-            text-align: center;
-            font-size: 13px;
-        }
-        label {
-            color: #999;
+        
+        .modal label {
+            color: var(--text-secondary);
             font-size: 12px;
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
+        
+        .modal input, .modal select {
+            width: 100%;
+            margin-bottom: 16px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #0a0a0a;
+            color: var(--text-main);
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        
+        .modal input:focus, .modal select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.1);
+        }
+        
+        .modal-title {
+            color: var(--primary);
+            margin-bottom: 24px;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: var(--accent-warm);
+            color: #fff;
+            padding: 14px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .submit-btn:hover {
+            background: #d35400;
+            transform: translateY(-2px);
+        }
+        
+        .success-msg {
+            color: var(--accent-success);
+            margin-top: 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
         .stats-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            background: #0a0a0a;
-            border-top: 1px solid #333;
-            padding: 12px 20px;
+            background: var(--dark-bg);
+            border-top: 1px solid var(--border);
+            padding: 16px 20px;
             display: flex;
             justify-content: space-around;
-            gap: 10px;
+            gap: 12px;
             z-index: 100;
         }
+        
         .stat-item {
             text-align: center;
-            min-width: 70px;
+            min-width: 60px;
             cursor: pointer;
+            transition: all 0.2s ease;
         }
+        
+        .stat-item:hover {
+            transform: translateY(-2px);
+        }
+        
         .stat-number {
-            color: #f5a623;
-            font-size: 16px;
-            font-weight: bold;
+            color: var(--primary);
+            font-size: 18px;
+            font-weight: 700;
         }
+        
         .stat-label {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 10px;
             text-transform: uppercase;
-            margin-top: 3px;
+            margin-top: 4px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
         }
-        .rich-badge {
-            display: inline-block;
-            background: #27ae60;
-            color: #fff;
-            padding: 3px 6px;
+        
+        @media (max-width: 600px) {
+            h1 { font-size: 36px; }
+            .word-card { padding: 20px; }
+            .modal-content { width: 95%; padding: 24px; }
+            .search-wrapper { flex-direction: column; }
+            .search-btn { width: 100%; }
+            .suggestions-container { right: 0; }
+            .stats-bar { padding: 12px 16px; gap: 8px; }
+            .stat-number { font-size: 16px; }
+        }
+        
+        .suggestions-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .suggestions-container::-webkit-scrollbar-track {
+            background: var(--card-bg);
+        }
+        
+        .suggestions-container::-webkit-scrollbar-thumb {
+            background: var(--border);
             border-radius: 3px;
-            font-size: 10px;
-            margin-left: 6px;
+        }
+        
+        .suggestions-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>Ede</h1>
-    <p class="subtitle">African Language Infrastructure</p>
 
-    <div class="search-box">
-        <input type="text" id="word" placeholder="Search a word..." />
-        <button onclick="searchWord()">Search</button>
+<div class="container">
+    <header>
+        <h1>Ede</h1>
+        <p class="tagline">African Language Infrastructure</p>
+    </header>
+
+    <div class="search-container">
+        <div class="search-wrapper">
+            <div style="position: relative; flex: 1;">
+                <input type="text" id="word" placeholder="Search a word or phrase..." onkeyup="showSuggestions()" />
+                <div id="suggestions" class="suggestions-container"></div>
+            </div>
+            <button class="search-btn" onclick="searchWord()">Search</button>
+        </div>
     </div>
 
     <div id="results"></div>
@@ -265,8 +512,8 @@
         <div class="modal-title">Add translation</div>
         <input type="hidden" id="modalWord" />
         
-        <label>Your name (optional, can be anything)</label>
-        <input type="text" id="modalUsername" placeholder="e.g. Ife, ChatGPT, Anonymous" />
+        <label>Your name (optional)</label>
+        <input type="text" id="modalUsername" placeholder="e.g. Ife, Anonymous" />
         
         <label>Language</label>
         <select id="modalLanguage">
@@ -278,7 +525,7 @@
         </select>
         
         <label>Your translation</label>
-        <input type="text" id="modalTranslation" placeholder="Enter word" />
+        <input type="text" id="modalTranslation" placeholder="Enter translation" />
         
         <button class="submit-btn" onclick="submitContribution()">Submit</button>
         <div id="successMsg"></div>
@@ -286,13 +533,12 @@
 </div>
 
 <div id="contributorsModal" class="modal">
-    <div class="modal-content" style="max-width: 500px; max-height: 70vh; overflow-y: auto;">
+    <div class="modal-content" style="max-height: 70vh; overflow-y: auto;">
         <span class="close" onclick="closeContributorsModal()">&times;</span>
         <div class="modal-title">Contributors</div>
-        <div id="contributorsList" style="color: #ddd; font-size: 13px;"></div>
+        <div id="contributorsList"></div>
     </div>
 </div>
-
 
 <script>
 const API = "";
@@ -306,7 +552,7 @@ async function loadStats() {
         document.getElementById("stats").innerHTML = `
             <div class="stat-item">
                 <div class="stat-number">1.9M</div>
-                <div class="stat-label">Total Phrases</div>
+                <div class="stat-label">Phrases</div>
             </div>
             <div class="stat-item" onclick="showLanguageBreakdown()">
                 <div class="stat-number">4</div>
@@ -324,57 +570,75 @@ async function loadStats() {
 
 function showLanguageBreakdown() {
     const modal = document.createElement('div');
-    modal.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: #1a1a2e;
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 20px;
-        z-index: 2000;
-        width: 85%;
-        max-width: 350px;
-    `;
+    modal.className = 'modal';
+    modal.style.display = 'block';
     
     modal.innerHTML = `
-        <div style="color: #f5a623; font-size: 18px; margin-bottom: 15px;">Languages</div>
-        <div style="color: #ddd; font-size: 14px; line-height: 1.8;">
-            <div style="margin-bottom: 10px;">🇳🇬 <strong>Yoruba</strong> — 407,271 phrases</div>
-            <div style="margin-bottom: 10px;">🇰🇪 <strong>Swahili</strong> — 561,449 phrases</div>
-            <div style="margin-bottom: 10px;">🇿🇦 <strong>Xhosa</strong> — 953,639 phrases</div>
-            <div style="margin-bottom: 15px;">🇲🇦 <strong>Tamazight</strong> — 6,188 phrases</div>
-            <div style="color: #666; font-size: 12px; border-top: 1px solid #333; padding-top: 10px;">
-                Total: 1,928,547 unique English-African phrases
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+            <div class="modal-title">Languages</div>
+            <div style="color: var(--text-main); font-size: 14px; line-height: 2;">
+                <div style="margin-bottom: 14px;">🇳🇬 <strong>Yoruba</strong><br><span style="color: var(--text-secondary); font-size: 13px;">407,271 phrases</span></div>
+                <div style="margin-bottom: 14px;">🇰🇪 <strong>Swahili</strong><br><span style="color: var(--text-secondary); font-size: 13px;">561,449 phrases</span></div>
+                <div style="margin-bottom: 14px;">🇿🇦 <strong>Xhosa</strong><br><span style="color: var(--text-secondary); font-size: 13px;">953,639 phrases</span></div>
+                <div style="margin-bottom: 20px;">🇲🇦 <strong>Tamazight</strong><br><span style="color: var(--text-secondary); font-size: 13px;">6,188 phrases</span></div>
+                <div style="color: var(--text-secondary); font-size: 12px; border-top: 1px solid var(--border); padding-top: 14px;">
+                    <strong>Total:</strong> 1,928,547 unique English-African phrases
+                </div>
             </div>
         </div>
-        <button onclick="this.parentElement.remove()" style="width: 100%; margin-top: 15px; background: #f5a623; color: #000; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Close</button>
     `;
     
     document.body.appendChild(modal);
+    modal.onclick = (e) => e.target === modal && modal.remove();
+}
+
+async function showSuggestions() {
+    const word = document.getElementById("word").value.trim();
+    const suggestionsDiv = document.getElementById("suggestions");
     
-    const backdrop = document.createElement('div');
-    backdrop.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 1999;
-    `;
-    backdrop.onclick = () => {
-        modal.remove();
-        backdrop.remove();
-    };
-    document.body.appendChild(backdrop);
+    if (word.length < 2) {
+        suggestionsDiv.style.display = "none";
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API}/search-suggestions?q=${encodeURIComponent(word)}&limit=5`);
+        const data = await res.json();
+        
+        if (data.suggestions.length === 0) {
+            suggestionsDiv.style.display = "none";
+            return;
+        }
+        
+        let html = '';
+        for (const suggestion of data.suggestions) {
+            html += `
+                <div class="suggestion-item" onclick="selectSuggestion('${suggestion.replace(/'/g, "\\'")}')">
+                    ${suggestion}
+                </div>
+            `;
+        }
+        
+        suggestionsDiv.innerHTML = html;
+        suggestionsDiv.style.display = "block";
+    } catch (err) {
+        console.error("Suggestions error:", err);
+    }
+}
+
+function selectSuggestion(suggestion) {
+    document.getElementById("word").value = suggestion;
+    document.getElementById("suggestions").style.display = "none";
+    searchWord();
 }
 
 async function searchWord() {
     const word = document.getElementById("word").value.trim();
     if (!word) return;
 
-    document.getElementById("results").innerHTML = '<div class="loading">Searching...</div>';
+    document.getElementById("suggestions").style.display = "none";
+    document.getElementById("results").innerHTML = '<div class="loading">🔍 Searching...</div>';
 
     try {
         const res = await fetch(`${API}/word-sense?word=${encodeURIComponent(word)}`);
@@ -384,89 +648,63 @@ async function searchWord() {
             document.getElementById("results").innerHTML = `
                 <div class="word-card">
                     <div class="not-found">
-                        <p style="font-size: 16px; margin-bottom: 10px;">Not in our database</p>
-                        <p style="color: #666; margin-bottom: 15px; font-size: 13px;">You can help us add "<strong>${word}</strong>" to Ede</p>
-                        <button class="contribute-btn" onclick="openContributionModal('${word}')">Add Translation</button>
+                        <p style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">Not found</p>
+                        <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px;">Help us add "<strong>${word}</strong>" to Ede</p>
+                        <button class="contribute-btn" onclick="openContributionModal('${word}')">+ Add Translation</button>
                     </div>
                 </div>
             `;
             return;
         }
 
-        if (data.type === "rich_yoruba") {
-            let html = `
-                <div class="word-card">
-                    <div class="word-title">${data.word} <span class="rich-badge">Yoruba</span></div>
-            `;
+        if (data.type === "exact") {
+            let html = `<div class="word-card"><div class="word-title">${data.word}</div><div class="translations-grid">`;
 
             for (const definition of data.definitions) {
-                html += `
-                    <div class="definition-box">
-                        <div class="definition-text">${definition.definition}</div>
-                        <div class="translations-grid">
-                `;
-
                 for (const trans of definition.translations) {
                     html += `
-                        <div class="translation-item">
+                        <div class="translation-card">
                             <div class="translation-lang">${trans.language}</div>
                             <div class="translation-word">${trans.word}</div>
-                            <div style="font-size: 12px; color: #999;">${trans.domain}</div>
+                            <div class="translation-meta">${trans.domain}</div>
                         </div>
                     `;
                 }
+            }
 
+            html += `</div></div>`;
+            document.getElementById("results").innerHTML = html;
+            return;
+        }
+
+        if (data.type === "phrase_match") {
+            let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
+            html += `<div class="phrase-matches-section"><div class="phrase-title">Found in phrases</div>`;
+
+            for (const match of data.matches.slice(0, 5)) {
                 html += `
-                        </div>
+                    <div class="phrase-item" onclick="searchWord()" style="cursor: default;">
+                        <div class="phrase-text">"${match.phrase}"</div>
+                        <div class="phrase-translation">→ ${match.translations.map(t => t.word).join(', ')}</div>
                     </div>
                 `;
             }
 
             html += `</div>`;
+            html += `
+                <div class="contribute-section">
+                    <div class="contribute-title">Looking for the exact word?</div>
+                    <div class="contribute-text">Help us add "${word}" directly to Ede</div>
+                    <button class="contribute-btn" onclick="openContributionModal('${word}')">+ Add Translation</button>
+                </div>
+            `;
+            html += `</div>`;
             document.getElementById("results").innerHTML = html;
             return;
         }
 
-        let html = `
-            <div class="word-card">
-                <div class="word-title">${data.word}</div>
-                <div class="translations-grid">
-        `;
-
-        for (const trans of data.translations) {
-            html += `
-                <div class="translation-item">
-                    <div class="translation-lang">${trans.language}</div>
-                    <div class="translation-word">${trans.word}</div>
-                </div>
-            `;
-        }
-
-        html += `</div>`;
-
-        if (data.contribution_needed) {
-            html += `
-                <div class="missing-section">
-                    <div class="missing-title">Help us translate</div>
-                    <div class="missing-languages">
-            `;
-            for (const lang of data.missing_languages) {
-                html += `
-                    <button class="missing-lang" onclick="openContributionModal('${word}', '${lang}')">
-                        + ${lang}
-                    </button>
-                `;
-            }
-            html += `
-                    </div>
-                </div>
-            `;
-        }
-
-        html += `</div>`;
-        document.getElementById("results").innerHTML = html;
     } catch (err) {
-        document.getElementById("results").innerHTML = `<div class="error">Error: ${err.message}</div>`;
+        document.getElementById("results").innerHTML = `<div style="color: #e74c3c; padding: 20px; text-align: center;">Error: ${err.message}</div>`;
     }
 }
 
@@ -482,6 +720,19 @@ function openContributionModal(word, language = "") {
 
 function closeModal() {
     document.getElementById("contributionModal").style.display = "none";
+}
+
+function closeContributorsModal() {
+    document.getElementById("contributorsModal").style.display = "none";
+}
+
+function getOrCreateDeviceId() {
+    let deviceId = localStorage.getItem('ede_device_id');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('ede_device_id', deviceId);
+    }
+    return deviceId;
 }
 
 async function submitContribution() {
@@ -502,7 +753,6 @@ async function submitContribution() {
         const res = await fetch(`${API}/contribute?word=${encodeURIComponent(currentWord)}&language=${encodeURIComponent(language)}&translation=${encodeURIComponent(translation)}&username=${encodeURIComponent(username)}`, {
             method: "POST"
         });
-        const data = await res.json();
         
         const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
         const deviceId = getOrCreateDeviceId();
@@ -521,7 +771,7 @@ async function submitContribution() {
         contributions.push(newContribution);
         localStorage.setItem('ede_contributions', JSON.stringify(contributions));
         
-        document.getElementById("successMsg").innerHTML = `<div class="success-msg">✓ Added! You're now a contributor.</div>`;
+        document.getElementById("successMsg").innerHTML = `<div class="success-msg">✓ Contribution added! Thank you.</div>`;
         setTimeout(() => {
             closeModal();
             loadStats();
@@ -531,22 +781,13 @@ async function submitContribution() {
     }
 }
 
-function getOrCreateDeviceId() {
-    let deviceId = localStorage.getItem('ede_device_id');
-    if (!deviceId) {
-        deviceId = 'device_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('ede_device_id', deviceId);
-    }
-    return deviceId;
-}
-
 function showContributors() {
     try {
         const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
         const deviceId = getOrCreateDeviceId();
         
         if (contributions.length === 0) {
-            document.getElementById("contributorsList").innerHTML = '<p style="color: #666;">No contributions yet. Be the first!</p>';
+            document.getElementById("contributorsList").innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No contributions yet. Be the first! 🚀</p>';
         } else {
             let html = '';
             contributions.forEach((c) => {
@@ -555,17 +796,17 @@ function showContributors() {
                 const canUpvote = !isSubmitter && !hasUpvoted;
                 
                 const btnStyle = canUpvote 
-                    ? "background: #27ae60; cursor: pointer;" 
-                    : "background: #555; cursor: not-allowed; opacity: 0.6;";
+                    ? "background: var(--accent-success); cursor: pointer;" 
+                    : "background: var(--text-secondary); cursor: not-allowed; opacity: 0.5;";
                 
                 html += `
-                    <div style="background: rgba(245, 166, 35, 0.05); border: 1px solid #f5a623; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                        <div style="color: #f5a623; font-weight: bold; margin-bottom: 4px;">${c.username}${isSubmitter ? ' <span style="color: #999; font-size: 11px;">(you)</span>' : ''}</div>
-                        <div style="color: #ddd; margin-bottom: 8px;">"${c.word}" → <strong>${c.translation}</strong> (${c.language})</div>
+                    <div style="background: rgba(245, 166, 35, 0.08); border: 1px solid rgba(245, 166, 35, 0.2); padding: 16px; border-radius: 10px; margin-bottom: 12px;">
+                        <div style="color: var(--primary); font-weight: 600; margin-bottom: 8px; font-size: 14px;">${c.username}${isSubmitter ? ' <span style="color: var(--text-secondary); font-size: 11px;">(you)</span>' : ''}</div>
+                        <div style="color: var(--text-main); margin-bottom: 12px; font-size: 14px;">"${c.word}" → <strong style="color: var(--primary);">${c.translation}</strong> <span style="color: var(--text-secondary); font-size: 12px;">(${c.language})</span></div>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <button onclick="upvoteContribution(${c.id})" style="color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; ${btnStyle}" ${!canUpvote ? 'disabled' : ''}>👍 ${c.votes || 0}</button>
-                            <span style="color: #666; font-size: 11px;">${new Date(c.timestamp).toLocaleDateString()}</span>
-                            ${hasUpvoted ? '<span style="color: #27ae60; font-size: 11px;">✓ You voted</span>' : ''}
+                            <button onclick="upvoteContribution(${c.id})" style="color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; ${btnStyle}" ${!canUpvote ? 'disabled' : ''}>👍 ${c.votes || 0}</button>
+                            <span style="color: var(--text-secondary); font-size: 11px;">${new Date(c.timestamp).toLocaleDateString()}</span>
+                            ${hasUpvoted ? '<span style="color: var(--accent-success); font-size: 11px;">✓ Voted</span>' : ''}
                         </div>
                     </div>
                 `;
@@ -579,41 +820,37 @@ function showContributors() {
     }
 }
 
-function closeContributorsModal() {
-    document.getElementById("contributorsModal").style.display = "none";
-}
-
 function upvoteContribution(id) {
     const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
     const deviceId = getOrCreateDeviceId();
     const contribution = contributions.find(c => c.id === id);
     
     if (contribution) {
-        // Check if already upvoted
         if (contribution.upvoters && contribution.upvoters.includes(deviceId)) {
-            alert("You already upvoted this");
+            alert("You already voted");
             return;
         }
         
-        // Check if submitter
         if (contribution.submittedBy === deviceId) {
             alert("You can't upvote your own contribution");
             return;
         }
         
-        // Add upvote
         contribution.votes = (contribution.votes || 0) + 1;
         if (!contribution.upvoters) contribution.upvoters = [];
         contribution.upvoters.push(deviceId);
         
         localStorage.setItem('ede_contributions', JSON.stringify(contributions));
         showContributors();
+        loadStats();
     }
 }
 
-
 document.getElementById("word").addEventListener("keypress", e => {
-    if (e.key === "Enter") searchWord();
+    if (e.key === "Enter") {
+        document.getElementById("suggestions").style.display = "none";
+        searchWord();
+    }
 });
 
 window.onclick = function(event) {
@@ -625,5 +862,6 @@ window.onclick = function(event) {
 
 loadStats();
 </script>
+
 </body>
 </html>

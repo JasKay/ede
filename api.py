@@ -4,33 +4,50 @@ from fastapi.responses import FileResponse
 from datetime import date
 import json
 import os
-from datetime import datetime
 
+app = FastAPI(title="Ede API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-app = FastAPI(title="Ede API", description="Unified African Language Dataset API")
+# Load data at startup
+yoruba_rich = {}
+word_sense_db = {}
+contributions = {}
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Load word sense data at startup
-try:
-    with open("ede_word_sense.json", "r", encoding="utf-8") as f:
-        word_sense_db = json.load(f)
-except FileNotFoundError:
-    print("Warning: ede_word_sense.json not found.")
-    word_sense_db = {}
-
-@app.get("/app")
-def frontend():
-    return FileResponse("index.html")
+@app.on_event("startup")
+async def load_data():
+    global yoruba_rich, word_sense_db, contributions
+    
+    print("Loading ede_yoruba_rich.json...")
+    try:
+        with open("ede_yoruba_rich.json", "r", encoding="utf-8") as f:
+            yoruba_rich = json.load(f)
+        print(f"Loaded {len(yoruba_rich)} Yoruba phrases")
+    except FileNotFoundError:
+        print("ede_yoruba_rich.json not found")
+    
+    print("Loading ede_word_sense.json...")
+    try:
+        with open("ede_word_sense.json", "r", encoding="utf-8") as f:
+            word_sense_db = json.load(f)
+        print(f"Loaded {len(word_sense_db)} word sense entries")
+    except FileNotFoundError:
+        print("ede_word_sense.json not found")
+    
+    print("Loading contributions.json...")
+    try:
+        with open("contributions.json", "r", encoding="utf-8") as f:
+            contributions = json.load(f)
+        print(f"Loaded {len(contributions)} contributions")
+    except FileNotFoundError:
+        contributions = []
 
 @app.get("/")
-def frontend_root():
-    return FileResponse("index.html")
+def root():
+    return FileResponse("index.html", media_type="text/html")
+
+@app.get("/app")
+def app_route():
+    return FileResponse("index.html", media_type="text/html")
 
 @app.get("/stats")
 def stats():
@@ -40,13 +57,11 @@ def stats():
         
         total = len(master_data)
         
-        # Count domains
         domains = {}
         for entry in master_data:
             domain = entry.get("domain", "general")
             domains[domain] = domains.get(domain, 0) + 1
         
-        # Count languages
         languages = {}
         for entry in master_data:
             lang = entry.get("target_language", "Unknown")
@@ -56,80 +71,103 @@ def stats():
             "total_entries": total,
             "domains": domains,
             "languages": languages,
-            "contributions": 0
+            "contributions": len(contributions) if isinstance(contributions, list) else 0
         }
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/word-sense")
-def word_sense(word: str = Query(..., description="English word to look up")):
-    word_clean = word.lower().strip()
+@app.get("/search-suggestions")
+def search_suggestions(q: str, limit: int = 8):
+    q_lower = q.lower().strip()
     
-    if word_clean not in word_sense_db:
+    if not q_lower or len(q_lower) < 2:
+        return {"suggestions": []}
+    
+    try:
+        suggestions = []
+        for phrase in yoruba_rich.keys():
+            if q_lower in phrase.lower():
+                suggestions.append(phrase)
+        
+        suggestions.sort(key=lambda x: (not x.lower().startswith(q_lower), len(x)))
+        
+        return {"suggestions": suggestions[:limit]}
+    except Exception as e:
+        return {"suggestions": [], "error": str(e)}
+
+@app.get("/word-sense")
+def word_sense(word: str):
+    word_lower = word.lower().strip()
+    
+    if not word_lower:
+        return {"found": False, "error": "No word provided"}
+    
+    try:
+        # EXACT MATCH FIRST
+        if word_lower in yoruba_rich:
+            word_data = yoruba_rich[word_lower]
+            return {
+                "found": True,
+                "type": "exact",
+                "word": word_data["word"],
+                "definitions": word_data.get("definitions", [])
+            }
+        
+        # PHRASE MATCH - Find phrases containing the word
+        phrase_matches = []
+        for phrase, data in yoruba_rich.items():
+            if word_lower in phrase.lower():
+                phrase_matches.append({
+                    "phrase": phrase,
+                    "translations": data.get("definitions", [{}])[0].get("translations", [])
+                })
+        
+        if phrase_matches:
+            phrase_matches.sort(key=lambda x: len(x["phrase"]))
+            
+            return {
+                "found": True,
+                "type": "phrase_match",
+                "word": word,
+                "message": f"'{word}' found in these phrases",
+                "matches": phrase_matches[:10]
+            }
+        
+        # NOT FOUND
         return {
-            "word": word,
             "found": False,
-            "translations": [],
-            "missing_languages": ["Yoruba", "Swahili", "Xhosa", "Tamazight"],
-            "message": "Word not found in our high-confidence set. Help us translate it!"
+            "word": word,
+            "contribution_needed": True,
+            "missing_languages": ["Yoruba", "Swahili", "Xhosa", "Tamazight"]
         }
     
-    entry = word_sense_db[word_clean]
-    
-    # Expand short keys back to full format for frontend
-    translations = []
-    for trans in entry.get("t", []):
-        translations.append({
-            "language": trans["l"],
-            "word": trans["w"],
-            "confidence": trans["c"],
-            "frequency": trans["f"]
-        })
-    
-    translations = sorted(translations, key=lambda x: x["confidence"], reverse=True)
-    
-    # Find which languages have this word
-    languages_with_translation = {t["language"] for t in translations}
-    all_languages = ["Yoruba", "Swahili", "Xhosa", "Tamazight"]
-    missing_languages = [l for l in all_languages if l not in languages_with_translation]
-    
-    return {
-        "word": entry["word"],
-        "language": "English",
-        "found": True,
-        "total_translations": len(translations),
-        "translations": translations,
-        "missing_languages": missing_languages,
-        "contribution_needed": len(missing_languages) > 0
-    }
+    except Exception as e:
+        return {"found": False, "error": str(e)}
 
 @app.post("/contribute")
 def contribute(word: str, language: str, translation: str, username: str = "Anonymous"):
     try:
-        # Load existing contributions
         contributions_file = "contributions.json"
         if os.path.exists(contributions_file):
             with open(contributions_file, "r", encoding="utf-8") as f:
-                contributions = json.load(f)
+                contribs = json.load(f)
         else:
-            contributions = []
+            contribs = []
         
-        # Add new contribution
         new_contribution = {
-            "id": int(datetime.now().timestamp() * 1000),
+            "id": int(date.today().timestamp() * 1000),
             "username": username,
             "word": word,
             "translation": translation,
             "language": language,
             "votes": 0,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": str(date.today())
         }
         
-        contributions.append(new_contribution)
+        contribs.append(new_contribution)
         
-        # Save to file
         with open(contributions_file, "w", encoding="utf-8") as f:
-            json.dump(contributions, f, ensure_ascii=False, indent=2)
+            json.dump(contribs, f, ensure_ascii=False, indent=2)
         
         return {"success": True, "message": "Contribution saved"}
     except Exception as e:
