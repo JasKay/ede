@@ -139,8 +139,6 @@
             padding: 30px;
             color: #999;
         }
-        
-        /* Modal styles */
         .modal {
             display: none;
             position: fixed;
@@ -206,8 +204,6 @@
             display: block;
             margin-bottom: 5px;
         }
-        
-        /* Bottom stats bar */
         .stats-bar {
             position: fixed;
             bottom: 0;
@@ -224,6 +220,7 @@
         .stat-item {
             text-align: center;
             min-width: 70px;
+            cursor: pointer;
         }
         .stat-number {
             color: #f5a623;
@@ -260,15 +257,16 @@
     <div id="results"></div>
 </div>
 
-<!-- Bottom Stats Bar -->
 <div class="stats-bar" id="stats"></div>
 
-<!-- Contribution Modal -->
 <div id="contributionModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeModal()">&times;</span>
         <div class="modal-title">Add translation</div>
         <input type="hidden" id="modalWord" />
+        
+        <label>Your name (optional, can be anything)</label>
+        <input type="text" id="modalUsername" placeholder="e.g. Ife, ChatGPT, Anonymous" />
         
         <label>Language</label>
         <select id="modalLanguage">
@@ -287,35 +285,89 @@
     </div>
 </div>
 
+<div id="contributorsModal" class="modal">
+    <div class="modal-content" style="max-width: 500px; max-height: 70vh; overflow-y: auto;">
+        <span class="close" onclick="closeContributorsModal()">&times;</span>
+        <div class="modal-title">Contributors</div>
+        <div id="contributorsList" style="color: #ddd; font-size: 13px;"></div>
+    </div>
+</div>
+
+
 <script>
 const API = "";
 let currentWord = "";
 
 async function loadStats() {
     try {
-        const res = await fetch(`${API}/stats`);
-        const data = await res.json();
+        const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
+        const contributionCount = contributions.length;
+        
         document.getElementById("stats").innerHTML = `
             <div class="stat-item">
-                <div class="stat-number">${(data.total_entries / 1000000).toFixed(1)}M</div>
-                <div class="stat-label">Entries</div>
+                <div class="stat-number">1.9M</div>
+                <div class="stat-label">Total Phrases</div>
             </div>
-            <div class="stat-item">
-                <div class="stat-number">${data.languages ? Object.keys(data.languages).length : 4}</div>
+            <div class="stat-item" onclick="showLanguageBreakdown()">
+                <div class="stat-number">4</div>
                 <div class="stat-label">Languages</div>
             </div>
-            <div class="stat-item">
-                <div class="stat-number">${(data.yoruba_rich_words / 1000).toFixed(0)}k</div>
-                <div class="stat-label">Yoruba</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${data.contributions}</div>
+            <div class="stat-item" onclick="showContributors()">
+                <div class="stat-number">${contributionCount}</div>
                 <div class="stat-label">Contributions</div>
             </div>
         `;
     } catch (err) {
         console.error("Stats error:", err);
     }
+}
+
+function showLanguageBreakdown() {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #1a1a2e;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 20px;
+        z-index: 2000;
+        width: 85%;
+        max-width: 350px;
+    `;
+    
+    modal.innerHTML = `
+        <div style="color: #f5a623; font-size: 18px; margin-bottom: 15px;">Languages</div>
+        <div style="color: #ddd; font-size: 14px; line-height: 1.8;">
+            <div style="margin-bottom: 10px;">🇳🇬 <strong>Yoruba</strong> — 407,271 phrases</div>
+            <div style="margin-bottom: 10px;">🇰🇪 <strong>Swahili</strong> — 561,449 phrases</div>
+            <div style="margin-bottom: 10px;">🇿🇦 <strong>Xhosa</strong> — 953,639 phrases</div>
+            <div style="margin-bottom: 15px;">🇲🇦 <strong>Tamazight</strong> — 6,188 phrases</div>
+            <div style="color: #666; font-size: 12px; border-top: 1px solid #333; padding-top: 10px;">
+                Total: 1,928,547 unique English-African phrases
+            </div>
+        </div>
+        <button onclick="this.parentElement.remove()" style="width: 100%; margin-top: 15px; background: #f5a623; color: #000; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Close</button>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1999;
+    `;
+    backdrop.onclick = () => {
+        modal.remove();
+        backdrop.remove();
+    };
+    document.body.appendChild(backdrop);
 }
 
 async function searchWord() {
@@ -341,7 +393,6 @@ async function searchWord() {
             return;
         }
 
-        // Handle rich Yoruba format
         if (data.type === "rich_yoruba") {
             let html = `
                 <div class="word-card">
@@ -376,7 +427,6 @@ async function searchWord() {
             return;
         }
 
-        // Handle simple format
         let html = `
             <div class="word-card">
                 <div class="word-title">${data.word}</div>
@@ -423,6 +473,7 @@ async function searchWord() {
 function openContributionModal(word, language = "") {
     currentWord = word;
     document.getElementById("modalWord").value = word;
+    document.getElementById("modalUsername").value = "";
     document.getElementById("modalLanguage").value = language;
     document.getElementById("modalTranslation").value = "";
     document.getElementById("successMsg").innerHTML = "";
@@ -434,6 +485,7 @@ function closeModal() {
 }
 
 async function submitContribution() {
+    const username = document.getElementById("modalUsername").value.trim() || "Anonymous";
     const language = document.getElementById("modalLanguage").value;
     const translation = document.getElementById("modalTranslation").value.trim();
     
@@ -447,12 +499,29 @@ async function submitContribution() {
     }
 
     try {
-        const res = await fetch(`${API}/contribute?word=${encodeURIComponent(currentWord)}&language=${encodeURIComponent(language)}&translation=${encodeURIComponent(translation)}`, {
+        const res = await fetch(`${API}/contribute?word=${encodeURIComponent(currentWord)}&language=${encodeURIComponent(language)}&translation=${encodeURIComponent(translation)}&username=${encodeURIComponent(username)}`, {
             method: "POST"
         });
         const data = await res.json();
         
-        document.getElementById("successMsg").innerHTML = `<div class="success-msg">✓ Added! Thanks for helping.</div>`;
+        const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
+        const deviceId = getOrCreateDeviceId();
+        
+        const newContribution = {
+            id: Date.now(),
+            username: username,
+            word: currentWord,
+            translation: translation,
+            language: language,
+            votes: 0,
+            upvoters: [],
+            submittedBy: deviceId,
+            timestamp: new Date().toISOString()
+        };
+        contributions.push(newContribution);
+        localStorage.setItem('ede_contributions', JSON.stringify(contributions));
+        
+        document.getElementById("successMsg").innerHTML = `<div class="success-msg">✓ Added! You're now a contributor.</div>`;
         setTimeout(() => {
             closeModal();
             loadStats();
@@ -461,6 +530,87 @@ async function submitContribution() {
         alert("Error: " + err.message);
     }
 }
+
+function getOrCreateDeviceId() {
+    let deviceId = localStorage.getItem('ede_device_id');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('ede_device_id', deviceId);
+    }
+    return deviceId;
+}
+
+function showContributors() {
+    try {
+        const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
+        const deviceId = getOrCreateDeviceId();
+        
+        if (contributions.length === 0) {
+            document.getElementById("contributorsList").innerHTML = '<p style="color: #666;">No contributions yet. Be the first!</p>';
+        } else {
+            let html = '';
+            contributions.forEach((c) => {
+                const isSubmitter = c.submittedBy === deviceId;
+                const hasUpvoted = c.upvoters && c.upvoters.includes(deviceId);
+                const canUpvote = !isSubmitter && !hasUpvoted;
+                
+                const btnStyle = canUpvote 
+                    ? "background: #27ae60; cursor: pointer;" 
+                    : "background: #555; cursor: not-allowed; opacity: 0.6;";
+                
+                html += `
+                    <div style="background: rgba(245, 166, 35, 0.05); border: 1px solid #f5a623; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                        <div style="color: #f5a623; font-weight: bold; margin-bottom: 4px;">${c.username}${isSubmitter ? ' <span style="color: #999; font-size: 11px;">(you)</span>' : ''}</div>
+                        <div style="color: #ddd; margin-bottom: 8px;">"${c.word}" → <strong>${c.translation}</strong> (${c.language})</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button onclick="upvoteContribution(${c.id})" style="color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; ${btnStyle}" ${!canUpvote ? 'disabled' : ''}>👍 ${c.votes || 0}</button>
+                            <span style="color: #666; font-size: 11px;">${new Date(c.timestamp).toLocaleDateString()}</span>
+                            ${hasUpvoted ? '<span style="color: #27ae60; font-size: 11px;">✓ You voted</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById("contributorsList").innerHTML = html;
+        }
+        
+        document.getElementById("contributorsModal").style.display = "block";
+    } catch (err) {
+        console.error("Error loading contributors:", err);
+    }
+}
+
+function closeContributorsModal() {
+    document.getElementById("contributorsModal").style.display = "none";
+}
+
+function upvoteContribution(id) {
+    const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');
+    const deviceId = getOrCreateDeviceId();
+    const contribution = contributions.find(c => c.id === id);
+    
+    if (contribution) {
+        // Check if already upvoted
+        if (contribution.upvoters && contribution.upvoters.includes(deviceId)) {
+            alert("You already upvoted this");
+            return;
+        }
+        
+        // Check if submitter
+        if (contribution.submittedBy === deviceId) {
+            alert("You can't upvote your own contribution");
+            return;
+        }
+        
+        // Add upvote
+        contribution.votes = (contribution.votes || 0) + 1;
+        if (!contribution.upvoters) contribution.upvoters = [];
+        contribution.upvoters.push(deviceId);
+        
+        localStorage.setItem('ede_contributions', JSON.stringify(contributions));
+        showContributors();
+    }
+}
+
 
 document.getElementById("word").addEventListener("keypress", e => {
     if (e.key === "Enter") searchWord();

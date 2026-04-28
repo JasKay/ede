@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from datetime import date
 import json
+import os
+from datetime import datetime
+
 
 app = FastAPI(title="Ede API", description="Unified African Language Dataset API")
 
@@ -31,21 +34,32 @@ def frontend_root():
 
 @app.get("/stats")
 def stats():
-    return {
-        "total_entries": 1693776,
-        "domains": {
-            "conversational": 121311,
-            "multi-domain": 9991,
-            "software-ui": 1578,
-            "general": 1560196
-        },
-        "languages": {
-            "Yoruba": 132880,
-            "Swahili": 563294,
-            "Xhosa": 993668,
-            "Tamazight": 6194
+    try:
+        with open("ede_master.json", "r", encoding="utf-8") as f:
+            master_data = json.load(f)
+        
+        total = len(master_data)
+        
+        # Count domains
+        domains = {}
+        for entry in master_data:
+            domain = entry.get("domain", "general")
+            domains[domain] = domains.get(domain, 0) + 1
+        
+        # Count languages
+        languages = {}
+        for entry in master_data:
+            lang = entry.get("target_language", "Unknown")
+            languages[lang] = languages.get(lang, 0) + 1
+        
+        return {
+            "total_entries": total,
+            "domains": domains,
+            "languages": languages,
+            "contributions": 0
         }
-    }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/word-sense")
 def word_sense(word: str = Query(..., description="English word to look up")):
@@ -90,30 +104,33 @@ def word_sense(word: str = Query(..., description="English word to look up")):
     }
 
 @app.post("/contribute")
-def contribute(word: str = Query(...), language: str = Query(...), translation: str = Query(...)):
-    """User submits a missing translation"""
-    contribution = {
-        "word": word.lower().strip(),
-        "language": language,
-        "translation": translation.strip(),
-        "timestamp": str(date.today())
-    }
-    
-    # Load existing contributions
+def contribute(word: str, language: str, translation: str, username: str = "Anonymous"):
     try:
-        with open("contributions.json", "r", encoding="utf-8") as f:
-            contributions = json.load(f)
-    except FileNotFoundError:
-        contributions = []
-    
-    # Add new contribution
-    contributions.append(contribution)
-    
-    # Save
-    with open("contributions.json", "w", encoding="utf-8") as f:
-        json.dump(contributions, f, ensure_ascii=False, indent=2)
-    
-    return {
-        "status": "received",
-        "message": f"Thank you! Your translation '{translation}' for '{word}' in {language} has been submitted."
-    }
+        # Load existing contributions
+        contributions_file = "contributions.json"
+        if os.path.exists(contributions_file):
+            with open(contributions_file, "r", encoding="utf-8") as f:
+                contributions = json.load(f)
+        else:
+            contributions = []
+        
+        # Add new contribution
+        new_contribution = {
+            "id": int(datetime.now().timestamp() * 1000),
+            "username": username,
+            "word": word,
+            "translation": translation,
+            "language": language,
+            "votes": 0,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        contributions.append(new_contribution)
+        
+        # Save to file
+        with open(contributions_file, "w", encoding="utf-8") as f:
+            json.dump(contributions, f, ensure_ascii=False, indent=2)
+        
+        return {"success": True, "message": "Contribution saved"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
