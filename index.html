@@ -33,10 +33,37 @@
         }
         
         header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding-top: 20px;
-        }
+    text-align: center;
+    margin-bottom: 40px;
+    padding-top: 20px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, var(--dark-bg) 0%, #1a1a2e 100%);
+    z-index: 50;
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding-top: 200px;
+}
+
+#translatorContainer .container {
+    padding-top: 200px;
+}
+
+#chatContainer {
+    padding-top: 160px;
+}
+
+#chatMessages {
+    margin-top: 20px;
+}
+
         
         h1 {
             font-size: 48px;
@@ -496,24 +523,91 @@
 </head>
 <body>
 
+<!-- HEADER - Always visible -->
 <div class="container">
     <header>
         <h1>Ede</h1>
         <p class="tagline">African Language Infrastructure</p>
+        <button onclick="toggleChat()" style="
+            background: var(--accent-warm);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 12px;
+        ">💬 Open Chatbot</button>
     </header>
-
-    <div class="search-container">
-        <div class="search-wrapper">
-            <div style="position: relative; flex: 1;">
-                <input type="text" id="word" placeholder="Search in any language..." onkeyup="showSuggestions()" />
-                <div id="suggestions" class="suggestions-container"></div>
-            </div>
-            <button class="search-btn" onclick="searchWord()">Search</button>
-        </div>
-    </div>
-
-    <div id="results"></div>
 </div>
+
+<!-- TRANSLATOR VIEW -->
+<div id="translatorContainer">
+    <div class="container">
+        <div class="search-container">
+            <div class="search-wrapper">
+                <div style="position: relative; flex: 1;">
+                    <input type="text" id="word" placeholder="Search in any language..." onkeyup="showSuggestions()" />
+                    <div id="suggestions" class="suggestions-container"></div>
+                </div>
+                <button class="search-btn" onclick="searchWord()">Search</button>
+            </div>
+        </div>
+        <div id="results"></div>
+    </div>
+</div>
+
+<!-- CHATBOT VIEW -->
+<div id="chatContainer" style="display: none; flex-direction: column; height: 100vh; padding-bottom: 0;">
+    <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="color: var(--primary); margin: 0;">Chatbot</h2>
+        <button onclick="toggleChat()" style="
+            background: var(--text-secondary);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        ">← Back</button>
+    </div>
+    <div id="chatMessages" style="
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    "></div>
+    
+    <div style="
+        display: flex;
+        gap: 12px;
+        padding: 16px;
+        border-top: 1px solid var(--border);
+        background: var(--dark-bg);
+    ">
+        <input type="text" id="chatInput" placeholder="Ask me about translations..." style="
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        " onkeypress="if(event.key==='Enter') sendChat()" />
+        <button onclick="sendChat()" style="
+            background: var(--primary);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        ">Send</button>
+    </div>
+</div>
+
 
 <div class="stats-bar" id="stats"></div>
 
@@ -649,53 +743,65 @@ async function searchWord() {
     if (!word) return;
 
     document.getElementById("suggestions").style.display = "none";
-    document.getElementById("results").innerHTML = '<div class="loading">🔍 Searching...</div>';
+    document.getElementById("results").innerHTML = '<div class="loading">🔍 Translating...</div>';
+    
+    // Hide search container
+    document.querySelector(".search-container").style.display = "none";
 
     try {
-        const res = await fetch(`${API}/word-sense?word=${encodeURIComponent(word)}`);
+        const res = await fetch(`${API}/translate?word=${encodeURIComponent(word)}`);
         const data = await res.json();
 
-        if (data.found === false && !data.results) {
+        if (!data.found) {
             document.getElementById("results").innerHTML = `
                 <div class="word-card">
                     <div class="not-found">
                         <p style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">Not found</p>
                         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px;">Help us add "<strong>${word}</strong>" to Ede</p>
-                        <button class="contribute-btn" onclick="openContributionModal('${word}')">+ Add Translation</button>
+                        <button class="contribute-btn" onclick="newSearch()">+ Add Translation</button>
+                        <button class="contribute-btn" style="background: var(--text-secondary); margin-top: 12px;" onclick="newSearch()">← New Search</button>
                     </div>
                 </div>
             `;
             return;
         }
 
-        // Show all 4 languages
-        let html = `<div class="word-card"><div class="word-title">${data.word}</div>`;
+        let html = `
+            <button class="contribute-btn" style="background: var(--text-secondary); margin-bottom: 20px; width: 100%;" onclick="newSearch()">← New Search</button>
+            <div class="word-card"><div class="word-title">${data.word}</div>`;
         html += `<div class="translations-grid">`;
 
         const languages = ["Yoruba", "Swahili", "Xhosa", "Tamazight"];
         
         for (const lang of languages) {
-            const translations = data.results[lang] || [];
+            const trans = data.results[lang];
             
-            if (translations.length > 0) {
-                // Has translations
-                for (const definition of translations) {
-                    for (const trans of definition.translations || []) {
-                        html += `
-                            <div class="translation-card">
-                                <div class="translation-lang">✓ ${trans.language}</div>
-                                <div class="translation-word">${trans.word}</div>
-                                <div class="translation-meta">${trans.domain || 'general'}</div>
-                            </div>
-                        `;
-                    }
+            if (trans) {
+                html += `
+                    <div class="translation-card">
+                        <div class="translation-lang">✓ ${lang}</div>
+                        <div class="translation-word">${trans.word}</div>
+                        <div class="translation-meta">
+                            Confidence: ${(trans.confidence * 100).toFixed(0)}% | POS: ${trans.pos}
+                        </div>
+                `;
+                
+                if (trans.examples && trans.examples.length > 0) {
+                    const ex = trans.examples[0];
+                    html += `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; color: var(--text-secondary);">
+                            <strong>Example:</strong><br>
+                            "${ex.english}"
+                        </div>
+                    `;
                 }
+                
+                html += `</div>`;
             } else {
-                // Missing translation
                 html += `
                     <div class="translation-card" style="background: rgba(200, 100, 50, 0.08); border-color: rgba(230, 126, 34, 0.3); opacity: 0.7;">
                         <div class="translation-lang">✕ ${lang}</div>
-                        <div class="translation-word" style="color: var(--text-secondary); font-size: 14px;">Not in database</div>
+                        <div class="translation-word" style="color: var(--text-secondary); font-size: 14px;">Not available</div>
                         <button class="translation-meta" style="background: var(--accent-warm); color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 8px;" onclick="openContributionModal('${word}', '${lang}')">+ Add</button>
                     </div>
                 `;
@@ -708,6 +814,13 @@ async function searchWord() {
     } catch (err) {
         document.getElementById("results").innerHTML = `<div style="color: #e74c3c; padding: 20px; text-align: center;">Error: ${err.message}</div>`;
     }
+}
+
+function newSearch() {
+    document.querySelector(".search-container").style.display = "block";
+    document.getElementById("word").value = "";
+    document.getElementById("word").focus();
+    document.getElementById("results").innerHTML = "";
 }
 
 function openContributionModal(word, language = "") {
@@ -736,6 +849,14 @@ function getOrCreateDeviceId() {
     }
     return deviceId;
 }
+
+function newSearch() {
+    document.querySelector(".search-container").style.display = "block";
+    document.getElementById("word").value = "";
+    document.getElementById("results").innerHTML = "";
+    document.getElementById("word").focus();
+}
+
 
 async function submitContribution() {
     const username = document.getElementById("modalUsername").value.trim() || "Anonymous";
@@ -821,6 +942,55 @@ function showContributors() {
         console.error("Error loading contributors:", err);
     }
 }
+
+function toggleChat() {
+    const chat = document.getElementById("chatContainer");
+    const translator = document.getElementById("translatorContainer");
+    
+    if (chat.style.display === "none") {
+        chat.style.display = "flex";
+        translator.style.display = "none";
+        document.getElementById("chatInput").focus();
+    } else {
+        chat.style.display = "none";
+        translator.style.display = "block";
+    }
+}
+
+async function sendChat() {
+    const input = document.getElementById("chatInput");
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    const messagesDiv = document.getElementById("chatMessages");
+    
+    // Add user message
+    messagesDiv.innerHTML += `
+        <div style="align-self: flex-end; background: var(--primary); color: #000; padding: 12px 16px; border-radius: 12px; max-width: 80%; word-wrap: break-word;">
+            ${message}
+        </div>
+    `;
+    
+    input.value = "";
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    try {
+        const res = await fetch(`${API}/chat?message=${encodeURIComponent(message)}`);
+        const data = await res.json();
+        
+        messagesDiv.innerHTML += `
+            <div style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); padding: 12px 16px; border-radius: 12px; max-width: 80%; word-wrap: break-word; color: var(--text-main); font-size: 14px; line-height: 1.5;">
+                ${data.response.replace(/\n/g, '<br>')}
+            </div>
+        `;
+        
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    } catch (err) {
+        console.error("Chat error:", err);
+    }
+}
+
 
 function upvoteContribution(id) {
     const contributions = JSON.parse(localStorage.getItem('ede_contributions') || '[]');

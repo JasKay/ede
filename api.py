@@ -20,38 +20,44 @@ contributions = {}
 async def load_data():
     global yoruba_rich, swahili_rich, xhosa_rich, tamazight_rich, word_sense_db, contributions
     
-    print("Loading datasets...")
+    print("Loading enhanced datasets...")
     
-    # Try to load all 4 rich datasets (will work locally, fail gracefully on HF)
-    for lang_file, lang_var in [
-        ("ede_yoruba_rich.json", "yoruba_rich"),
-        ("ede_swahili_rich.json", "swahili_rich"),
-        ("ede_xhosa_rich.json", "xhosa_rich"),
-        ("ede_tamazight_rich.json", "tamazight_rich")
+    # Try enhanced first, fall back to rich
+    for lang_file, lang_var, lang_name in [
+        ("ede_yoruba_rich_enhanced.json", "yoruba_rich", "Yoruba"),
+        ("ede_swahili_rich_enhanced.json", "swahili_rich", "Swahili"),
+        ("ede_xhosa_rich_enhanced.json", "xhosa_rich", "Xhosa"),
+        ("ede_tamazight_rich_enhanced.json", "tamazight_rich", "Tamazight")
     ]:
         try:
             with open(lang_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 globals()[lang_var] = data
-                print(f"✓ Loaded {len(data)} entries from {lang_file}")
+                print(f"✓ Loaded {len(data)} enhanced {lang_name} entries")
         except FileNotFoundError:
-            print(f"⚠ {lang_file} not found (ok on HF Spaces)")
-            globals()[lang_var] = {}
+            # Fall back to non-enhanced
+            fallback_file = lang_file.replace("_enhanced", "")
+            try:
+                with open(fallback_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    globals()[lang_var] = data
+                    print(f"✓ Loaded {len(data)} {lang_name} entries (non-enhanced)")
+            except:
+                print(f"⚠ {lang_name} not found")
+                globals()[lang_var] = {}
     
-    # Load word_sense (always available, fallback for HF)
+    # Load word_sense
     try:
         with open("ede_word_sense.json", "r", encoding="utf-8") as f:
             word_sense_db = json.load(f)
-        print(f"✓ Loaded {len(word_sense_db)} word sense entries")
-    except FileNotFoundError:
-        print("⚠ ede_word_sense.json not found")
+    except:
+        pass
     
     # Load contributions
     try:
         with open("contributions.json", "r", encoding="utf-8") as f:
             contributions = json.load(f)
-        print(f"✓ Loaded {len(contributions)} contributions")
-    except FileNotFoundError:
+    except:
         contributions = []
 
 @app.get("/")
@@ -61,6 +67,93 @@ def root():
 @app.get("/app")
 def app_route():
     return FileResponse("index.html", media_type="text/html")
+
+@app.get("/chat")
+def chat(message: str):
+    msg_lower = message.lower().strip()
+    
+    # Extract intent and word
+    intents = {
+        "how do i say": "translate",
+        "what's the": "translate",
+        "translate": "translate",
+        "plural of": "plural",
+        "plural for": "plural",
+        "conjugate": "conjugate",
+        "past tense": "conjugate",
+        "examples of": "examples",
+        "example of": "examples",
+    }
+    
+    intent = None
+    word = None
+    
+    for trigger, detected_intent in intents.items():
+        if trigger in msg_lower:
+            intent = detected_intent
+            # Extract word after trigger
+            idx = msg_lower.find(trigger) + len(trigger)
+            word = msg_lower[idx:].strip().rstrip("?").strip()
+            break
+    
+    if not intent or not word:
+        return {
+            "response": "I can help you translate words between English and African languages (Yoruba, Swahili, Xhosa, Tamazight). Try:\n• 'How do I say person?'\n• 'Plural of person'\n• 'Conjugate walk'\n• 'Examples of person'"
+        }
+    
+    try:
+        # Find word in datasets
+        for lang_name, lang_data in [
+            ("Yoruba", yoruba_rich),
+            ("Swahili", swahili_rich),
+            ("Xhosa", xhosa_rich),
+            ("Tamazight", tamazight_rich)
+        ]:
+            if not lang_data or word not in lang_data:
+                continue
+            
+            entry = lang_data[word]
+            definition = entry['definitions'][0]
+            trans = definition['translations'][0] if definition['translations'] else None
+            
+            if not trans:
+                continue
+            
+            if intent == "translate":
+                response = f"The {lang_name} word for '{word}' is **{trans['word']}** (confidence: {int(trans.get('confidence', 0.85) * 100)}%)"
+                if trans.get('examples'):
+                    ex = trans['examples'][0]
+                    response += f"\n\nExample: \"{ex['english']}\" → \"{ex.get(lang_name.lower(), trans['word'])}\""
+                return {"response": response}
+            
+            elif intent == "plural":
+                plural = definition.get('conjugations', {}).get('plural', 'Not available')
+                response = f"Plural of '{word}' in {lang_name}: **{plural}**"
+                return {"response": response}
+            
+            elif intent == "conjugate":
+                conj = definition.get('conjugations', {})
+                if not conj:
+                    return {"response": f"Conjugation data not available for '{word}'"}
+                response = f"Conjugations of '{word}':\n"
+                for form, value in conj.items():
+                    response += f"• {form}: **{value}**\n"
+                return {"response": response}
+            
+            elif intent == "examples":
+                examples = trans.get('examples', [])
+                if not examples:
+                    return {"response": f"No examples available for '{word}'"}
+                response = f"Examples with '{word}':\n"
+                for i, ex in enumerate(examples[:3], 1):
+                    response += f"{i}. \"{ex['english']}\" → \"{ex.get(lang_name.lower(), trans['word'])}\"\n"
+                return {"response": response}
+        
+        return {"response": f"Sorry, I couldn't find '{word}' in my database. Would you like to add it?"}
+    
+    except Exception as e:
+        return {"response": f"Error: {str(e)}"}
+
 
 @app.get("/stats")
 def stats():
@@ -114,6 +207,61 @@ def search_suggestions(q: str, limit: int = 3):
         return {"suggestions": suggestions[:limit]}
     except Exception as e:
         return {"suggestions": [], "error": str(e)}
+
+@app.get("/translate")
+def translate(word: str):
+    word_lower = word.lower().strip()
+    
+    if not word_lower:
+        return {"found": False}
+    
+    results = {
+        "Yoruba": None,
+        "Swahili": None,
+        "Xhosa": None,
+        "Tamazight": None
+    }
+    
+    try:
+        for lang_name, lang_data in [
+            ("Yoruba", yoruba_rich),
+            ("Swahili", swahili_rich),
+            ("Xhosa", xhosa_rich),
+            ("Tamazight", tamazight_rich)
+        ]:
+            if not lang_data or word_lower not in lang_data:
+                results[lang_name] = None
+                continue
+            
+            entry = lang_data[word_lower]
+            definition = entry['definitions'][0]
+            
+            if not definition['translations']:
+                results[lang_name] = None
+                continue
+            
+            trans = definition['translations'][0]
+            
+            results[lang_name] = {
+                "word": trans['word'],
+                "confidence": trans.get('confidence', 0.85),
+                "pos": definition.get('pos_tag', 'NN'),
+                "examples": trans.get('examples', []),
+                "conjugations": definition.get('conjugations', {}),
+                "sources": trans.get('sources', [])
+            }
+        
+        found_any = any(v is not None for v in results.values())
+        
+        return {
+            "found": found_any,
+            "word": word_lower,
+            "results": results
+        }
+    
+    except Exception as e:
+        return {"found": False, "error": str(e)}
+
 
 @app.get("/word-sense")
 def word_sense(word: str):
