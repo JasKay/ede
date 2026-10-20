@@ -1,0 +1,10 @@
+.venv/
+venv/
+.git/
+.env*
+__pycache__/
+.pytest_cache/
+data/
+*.db*
+yoruba-nlp/
+tests/

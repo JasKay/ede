@@ -1,0 +1,76 @@
+const assert = require("node:assert/strict");
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
+(async () => {
+  let input = "";
+  for await (const chunk of process.stdin) input += chunk;
+  const { base, token } = JSON.parse(input);
+  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", e => errors.push(e.message));
+    page.on("console", msg => { if (msg.type() === "error") errors.push(msg.text()); });
+    await page.goto(base);
+    await page.waitForFunction(() => document.querySelector("#entry-count").textContent !== "—");
+    const stats = await (await context.request.get(base + "/stats")).json();
+    assert(stats.total_entries > 0);
+    assert(stats.examples.length > 0);
+    await page.fill("#query", stats.examples[0]);
+    await page.click("#search-button");
+    await page.waitForSelector("#results .entry");
+    assert.match(await page.locator("#results").innerText(), /Imported · unverified/);
+    assert.match(await page.locator("#results").innerText(), /Confidence: not established/);
+    assert.match(await page.locator("#results").innerText(), /Sources:/);
+    const title = await page.locator("#results .entry h3").first().innerText();
+    const translation = await page.locator("#results .translation").first().innerText();
+    // Correcting an actual corpus record must open a prefilled form.
+    await page.locator("#results .entry button").first().click();
+    assert.equal(await page.inputValue("#english"), title);
+    assert.equal(await page.inputValue("#yoruba"), translation);
+    await page.fill("#english", "Ede browser test record");
+    await page.fill("#yoruba", "Synthetic test text — not verified");
+    await page.fill("#username", "<img src=x onerror=alert(1)>");
+    await page.fill("#dialect", "test dialect");
+    await page.check('input[name="consent"]');
+    await page.click("#submit-contribution");
+    await page.waitForFunction(() => document.querySelector("#contribution-status").textContent.includes("Reference:"));
+    assert.match(await page.locator("#contribution-status").innerText(), /Saved for review/);
+    await page.selectOption("#record-kind", "all");
+    await page.fill("#query", "Ede browser test record");
+    await page.click("#search-button");
+    await page.waitForFunction(() => document.querySelector("#search-status").textContent.includes("No matching record"));
+    assert.equal(await page.locator("#results .entry").count(), 0);
+    await page.locator("#editor summary").click();
+    await page.fill("#review-token", token);
+    await page.locator("#review-form button").click();
+    await page.waitForSelector("#review-queue .entry");
+    assert.match(await page.locator("#review-queue").innerText(), /<img src=x onerror=alert\(1\)>/);
+    assert.equal(await page.locator("#review-queue img").count(), 0);
+    await page.getByRole("button", { name: "Approve as editor-reviewed" }).click();
+    await page.waitForFunction(() => document.querySelector("#review-status").textContent === "No pending submissions.");
+    await page.fill("#query", "Ede browser test record");
+    await page.click("#search-button");
+    await page.waitForSelector("#results .entry");
+    assert.match(await page.locator("#results").innerText(), /Editor reviewed/);
+    assert.match(await page.locator("#results").innerText(), /Native-speaker verification: not established/);
+    // A server failure must not clear the user's unsaved text or claim success.
+    await page.fill("#english", "Unsaved browser example");
+    await page.fill("#yoruba", "Retained text");
+    await page.check('input[name="consent"]');
+    await page.route("**/contribute", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Test storage failure" }) }));
+    await page.click("#submit-contribution");
+    await page.waitForFunction(() => document.querySelector("#contribution-status").textContent.includes("Test storage failure"));
+    assert.equal(await page.inputValue("#yoruba"), "Retained text");
+    await page.unroute("**/contribute");
+    // Ignore the expected simulated 503 browser console message.
+    const unexpected = errors.filter(e => !e.includes("503") && !e.includes("favicon.ico") && !e.includes("404"));
+    assert.deepEqual(unexpected, []);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(base);
+    await page.waitForFunction(() => document.querySelector("#entry-count").textContent !== "—");
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    console.log(JSON.stringify({ status: "passed", realCorpusPairs: stats.total_entries, search: true, contribution: true, review: true, failedSave: true, mobile: true }));
+    await context.close();
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });

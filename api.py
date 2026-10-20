@@ -1,372 +1,207 @@
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from datetime import date
-import json
+"""Ede: Yoruba corpus search and a moderated contribution queue."""
+import hmac
+import logging
+import sqlite3
+import hashlib
+import psycopg
 import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Literal
 
-app = FastAPI(title="Ede API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# Global data storage
-yoruba_rich = {}
-swahili_rich = {}
-xhosa_rich = {}
-tamazight_rich = {}
-word_sense_db = {}
-contributions = {}
+from corpus import Corpus
 
-@app.on_event("startup")
-async def load_data():
-    global yoruba_rich, swahili_rich, xhosa_rich, tamazight_rich, word_sense_db, contributions
-    
-    print("Loading enhanced datasets...")
-    
-    # Try enhanced first, fall back to rich
-    for lang_file, lang_var, lang_name in [
-        ("ede_yoruba_rich_enhanced.json", "yoruba_rich", "Yoruba"),
-        ("ede_swahili_rich_enhanced.json", "swahili_rich", "Swahili"),
-        ("ede_xhosa_rich_enhanced.json", "xhosa_rich", "Xhosa"),
-        ("ede_tamazight_rich_enhanced.json", "tamazight_rich", "Tamazight")
-    ]:
-        try:
-            with open(lang_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                globals()[lang_var] = data
-                print(f"✓ Loaded {len(data)} enhanced {lang_name} entries")
-        except FileNotFoundError:
-            # Fall back to non-enhanced
-            fallback_file = lang_file.replace("_enhanced", "")
-            try:
-                with open(fallback_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    globals()[lang_var] = data
-                    print(f"✓ Loaded {len(data)} {lang_name} entries (non-enhanced)")
-            except:
-                print(f"⚠ {lang_name} not found")
-                globals()[lang_var] = {}
-    
-    # Load word_sense
-    try:
-        with open("ede_word_sense.json", "r", encoding="utf-8") as f:
-            word_sense_db = json.load(f)
-    except:
-        pass
-    
-    # Load contributions
-    try:
-        with open("contributions.json", "r", encoding="utf-8") as f:
-            contributions = json.load(f)
-    except:
-        contributions = []
-
-@app.get("/")
-def root():
-    return FileResponse("index.html", media_type="text/html")
-
-@app.get("/app")
-def app_route():
-    return FileResponse("index.html", media_type="text/html")
-
-@app.get("/chat")
-def chat(message: str):
-    msg_lower = message.lower().strip()
-    
-    # Extract intent and word
-    intents = {
-        "how do i say": "translate",
-        "what's the": "translate",
-        "translate": "translate",
-        "plural of": "plural",
-        "plural for": "plural",
-        "conjugate": "conjugate",
-        "past tense": "conjugate",
-        "examples of": "examples",
-        "example of": "examples",
-    }
-    
-    intent = None
-    word = None
-    
-    for trigger, detected_intent in intents.items():
-        if trigger in msg_lower:
-            intent = detected_intent
-            # Extract word after trigger
-            idx = msg_lower.find(trigger) + len(trigger)
-            word = msg_lower[idx:].strip().rstrip("?").strip()
-            break
-    
-    if not intent or not word:
-        return {
-            "response": "I can help you translate words between English and African languages (Yoruba, Swahili, Xhosa, Tamazight). Try:\n• 'How do I say person?'\n• 'Plural of person'\n• 'Conjugate walk'\n• 'Examples of person'"
-        }
-    
-    try:
-        # Find word in datasets
-        for lang_name, lang_data in [
-            ("Yoruba", yoruba_rich),
-            ("Swahili", swahili_rich),
-            ("Xhosa", xhosa_rich),
-            ("Tamazight", tamazight_rich)
-        ]:
-            if not lang_data or word not in lang_data:
-                continue
-            
-            entry = lang_data[word]
-            definition = entry['definitions'][0]
-            trans = definition['translations'][0] if definition['translations'] else None
-            
-            if not trans:
-                continue
-            
-            if intent == "translate":
-                response = f"The {lang_name} word for '{word}' is **{trans['word']}** (confidence: {int(trans.get('confidence', 0.85) * 100)}%)"
-                if trans.get('examples'):
-                    ex = trans['examples'][0]
-                    response += f"\n\nExample: \"{ex['english']}\" → \"{ex.get(lang_name.lower(), trans['word'])}\""
-                return {"response": response}
-            
-            elif intent == "plural":
-                plural = definition.get('conjugations', {}).get('plural', 'Not available')
-                response = f"Plural of '{word}' in {lang_name}: **{plural}**"
-                return {"response": response}
-            
-            elif intent == "conjugate":
-                conj = definition.get('conjugations', {})
-                if not conj:
-                    return {"response": f"Conjugation data not available for '{word}'"}
-                response = f"Conjugations of '{word}':\n"
-                for form, value in conj.items():
-                    response += f"• {form}: **{value}**\n"
-                return {"response": response}
-            
-            elif intent == "examples":
-                examples = trans.get('examples', [])
-                if not examples:
-                    return {"response": f"No examples available for '{word}'"}
-                response = f"Examples with '{word}':\n"
-                for i, ex in enumerate(examples[:3], 1):
-                    response += f"{i}. \"{ex['english']}\" → \"{ex.get(lang_name.lower(), trans['word'])}\"\n"
-                return {"response": response}
-        
-        return {"response": f"Sorry, I couldn't find '{word}' in my database. Would you like to add it?"}
-    
-    except Exception as e:
-        return {"response": f"Error: {str(e)}"}
+ROOT = Path(__file__).resolve().parent
+logger = logging.getLogger("ede")
 
 
-@app.get("/stats")
-def stats():
-    try:
-        with open("ede_master.json", "r", encoding="utf-8") as f:
-            master_data = json.load(f)
-        
-        total = len(master_data)
-        
-        domains = {}
-        for entry in master_data:
-            domain = entry.get("domain", "general")
-            domains[domain] = domains.get(domain, 0) + 1
-        
-        languages = {}
-        for entry in master_data:
-            lang = entry.get("target_language", "Unknown")
-            languages[lang] = languages.get(lang, 0) + 1
-        
-        return {
-            "total_entries": total,
-            "domains": domains,
-            "languages": languages,
-            "contributions": len(contributions) if isinstance(contributions, list) else 0
-        }
-    except Exception as e:
-        return {"error": str(e), "contributions": 0}
+class Contribution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    word: str = Field(min_length=1, max_length=500)
+    translation: str = Field(min_length=1, max_length=1000)
+    language: Literal["Yoruba"] = "Yoruba"
+    username: str = Field(default="Anonymous", max_length=80)
+    dialect: str = Field(default="unspecified", max_length=100)
+    context: str = Field(default="", max_length=1000)
+    source: str = Field(default="", max_length=500)
+    consent: Literal[True]
 
-@app.get("/search-suggestions")
-def search_suggestions(q: str, limit: int = 3):
-    q_lower = q.lower().strip()
-    
-    if not q_lower or len(q_lower) < 2:
-        return {"suggestions": []}
-    
-    try:
-        suggestions = []
-        
-        # Search all 4 languages
-        for lang_data in [yoruba_rich, swahili_rich, xhosa_rich, tamazight_rich]:
-            if not lang_data:
-                continue
-            for phrase in lang_data.keys():
-                if q_lower in phrase.lower():
-                    suggestions.append(phrase)
-        
-        # Remove duplicates and sort
-        suggestions = list(set(suggestions))
-        suggestions.sort(key=lambda x: (not x.lower().startswith(q_lower), len(x)))
-        
-        return {"suggestions": suggestions[:limit]}
-    except Exception as e:
-        return {"suggestions": [], "error": str(e)}
+    @field_validator("word", "translation", "username", "dialect", "context", "source")
+    @classmethod
+    def clean_text(cls, value):
+        if any(ord(char) < 32 and char not in "\n\t" for char in value):
+            raise ValueError("Control characters are not allowed")
+        return value.strip()
 
-@app.get("/translate")
-def translate(word: str):
-    word_lower = word.lower().strip()
-    
-    if not word_lower:
-        return {"found": False}
-    
-    results = {
-        "Yoruba": None,
-        "Swahili": None,
-        "Xhosa": None,
-        "Tamazight": None
-    }
-    
-    try:
-        for lang_name, lang_data in [
-            ("Yoruba", yoruba_rich),
-            ("Swahili", swahili_rich),
-            ("Xhosa", xhosa_rich),
-            ("Tamazight", tamazight_rich)
-        ]:
-            if not lang_data or word_lower not in lang_data:
-                results[lang_name] = None
-                continue
-            
-            entry = lang_data[word_lower]
-            definition = entry['definitions'][0]
-            
-            if not definition['translations']:
-                results[lang_name] = None
-                continue
-            
-            trans = definition['translations'][0]
-            
-            results[lang_name] = {
-                "word": trans['word'],
-                "confidence": trans.get('confidence', 0.85),
-                "pos": definition.get('pos_tag', 'NN'),
-                "examples": trans.get('examples', []),
-                "conjugations": definition.get('conjugations', {}),
-                "sources": trans.get('sources', [])
-            }
-        
-        found_any = any(v is not None for v in results.values())
-        
-        return {
-            "found": found_any,
-            "word": word_lower,
-            "results": results
-        }
-    
-    except Exception as e:
-        return {"found": False, "error": str(e)}
+    @field_validator("word", "translation")
+    @classmethod
+    def not_blank(cls, value):
+        if not value:
+            raise ValueError("Text cannot be blank")
+        return value
 
 
-@app.get("/word-sense")
-def word_sense(word: str):
-    word_lower = word.lower().strip()
-    
-    if not word_lower:
-        return {"found": False, "error": "No word provided"}
-    
-    try:
-        results = {
-            "Yoruba": [],
-            "Swahili": [],
-            "Xhosa": [],
-            "Tamazight": []
-        }
-        
-        # Search all 4 languages
-        lang_map = {
-            "Yoruba": yoruba_rich,
-            "Swahili": swahili_rich,
-            "Xhosa": xhosa_rich,
-            "Tamazight": tamazight_rich
-        }
-        
-        found_any = False
-        
-        for lang_name, lang_data in lang_map.items():
-            if not lang_data:
-                continue
-            
-            if word_lower in lang_data:
-                word_data = lang_data[word_lower]
-                if "definitions" in word_data:
-                    definitions = word_data.get("definitions", [])
-                    for d in definitions:
-                        if "language" not in d:
-                            d["language"] = lang_name
-                    results[lang_name].extend(definitions)
-                    found_any = True
-        
-        # Fallback to word_sense for HF Spaces
-        if not found_any and word_sense_db and word_lower in word_sense_db:
-            word_data = word_sense_db[word_lower]
-            for item in word_data.get("t", []):
-                lang = item["l"]
-                if lang in results:
-                    results[lang].append({
-                        "id": f"{word_lower}_001",
-                        "definition": word,
-                        "translations": [{
-                            "language": lang,
-                            "word": item["w"],
-                            "confidence": item.get("c", 0.8),
-                            "frequency": item.get("f", 1),
-                            "domain": "general"
-                        }]
-                    })
-                    found_any = True
-        
-        if found_any:
-            return {
-                "found": True,
-                "type": "exact",
-                "word": word_lower,
-                "results": results
-            }
-        
-        # Not found - return empty results for all languages
-        return {
-            "found": False,
-            "word": word,
-            "results": results,
-            "contribution_needed": True,
-            "missing_languages": ["Yoruba", "Swahili", "Xhosa", "Tamazight"]
-        }
-    
-    except Exception as e:
-        return {"found": False, "error": str(e)}
+class Review(BaseModel):
+    approve: bool
 
-@app.post("/contribute")
-def contribute(word: str, language: str, translation: str, username: str = "Anonymous"):
-    try:
-        contributions_file = "contributions.json"
-        if os.path.exists(contributions_file):
-            with open(contributions_file, "r", encoding="utf-8") as f:
-                contribs = json.load(f)
+
+def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
+    remote_url = os.getenv("DATABASE_URL") if db_path is None else None
+    data_dir = Path(data_dir or os.getenv("EDE_DATA_DIR", str(ROOT / "data")))
+    default_db = Path("/data/ede.db") if Path("/data").is_dir() else ROOT / "data" / "ede.db"
+    db_path = db_path or os.getenv("EDE_DB_PATH", str(default_db))
+    review_token = review_token if review_token is not None else os.getenv("EDE_REVIEW_TOKEN", "")
+    # Spaces local disks are ephemeral. Do not accept submissions there by default.
+    if writable is None:
+        writable = bool(remote_url) or (not os.getenv("SPACE_ID") and not os.getenv("VERCEL")) or os.getenv("EDE_PERSISTENT_STORAGE") == "1"
+    if os.getenv("VERCEL") and not remote_url and writable:
+        raise RuntimeError("Vercel contribution writes require a remote database")
+
+    @asynccontextmanager
+    async def lifespan(app):
+        if remote_url:
+            from postgres_corpus import PostgresCorpus
+            app.state.corpus = PostgresCorpus(remote_url)
         else:
-            contribs = []
-        
-        new_contribution = {
-            "id": int(date.today().timestamp() * 1000),
-            "username": username,
-            "word": word,
-            "translation": translation,
-            "language": language,
-            "votes": 0,
-            "upvoters": [],
-            "timestamp": str(date.today())
-        }
-        
-        contribs.append(new_contribution)
-        
-        with open(contributions_file, "w", encoding="utf-8") as f:
-            json.dump(contribs, f, ensure_ascii=False, indent=2)
-        
-        return {"success": True, "message": "Contribution saved"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+            app.state.corpus = Corpus(db_path)
+        app.state.data_errors = []
+        candidates = [data_dir / "ede_yoruba_rich.json", data_dir / "ede_yoruba_rich_enhanced.json",
+                      data_dir / "ede_master.json", data_dir / "ede_word_sense.json",
+                      ROOT / "ede_yoruba_rich.json", ROOT / "ede_master.json", ROOT / "ede_word_sense.json"]
+        for path in dict.fromkeys(candidates):
+            if path.is_file():
+                try:
+                    app.state.corpus.import_file(path)
+                except (ValueError, KeyError, TypeError, OSError) as error:
+                    logger.exception("Corpus import failed: %s", path.name)
+                    app.state.data_errors.append(path.name)
+        yield
+
+    app = FastAPI(title="Ede Yoruba Corpus API", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+    @app.middleware("http")
+    async def headers(request, call_next):
+        if request.method == "POST" and request.headers.get("content-length", "0").isdigit():
+            if int(request.headers.get("content-length", "0")) > 16000:
+                return JSONResponse({"detail": "Request too large"}, status_code=413)
+        if request.method == "POST":
+            chunks, size = [], 0
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > 16000:
+                    return JSONResponse({"detail": "Request too large"}, status_code=413)
+                chunks.append(chunk)
+            request._body = b"".join(chunks)
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+            "img-src 'self' data:; base-uri 'none'; object-src 'none'; frame-ancestors 'self' https://huggingface.co")
+        if request.url.path.startswith(("/contribute", "/review")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/")
+    @app.get("/app", include_in_schema=False)
+    def index():
+        return FileResponse(ROOT / "index.html")
+
+    @app.get("/static/{name}", include_in_schema=False)
+    def static(name: Literal["app.js", "style.css"]):
+        return FileResponse(ROOT / "static" / name)
+
+    @app.get("/stats")
+    def stats(request: Request):
+        data = request.app.state.corpus.stats()
+        return {**data, "data_errors": request.app.state.data_errors,
+                "contributions_enabled": writable, "moderation_configured": bool(review_token),
+                "storage_note": "Submissions are stored in the server database." if writable else
+                    "Submissions are disabled until persistent storage is configured."}
+
+    @app.get("/health")
+    def health(request: Request):
+        stats = request.app.state.corpus.stats()
+        return {"status": "ready" if stats["ready"] else "no_data",
+                "data_errors": request.app.state.data_errors,
+                "contributions_enabled": writable}
+
+    @app.get("/search")
+    def search(request: Request, q: str = Query(min_length=1, max_length=500),
+               kind: Literal["all", "word", "phrase"] = "all", limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000)):
+        if not q.strip():
+            raise HTTPException(422, "Enter a word or phrase")
+        return request.app.state.corpus.search(q, limit, offset, kind)
+
+    @app.get("/browse")
+    def browse(request: Request, kind: Literal["all", "word", "phrase"] = "word",
+               limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000)):
+        return request.app.state.corpus.search("", limit, offset, kind)
+
+    @app.get("/search-suggestions")
+    def suggestions(request: Request, q: str = Query(max_length=100), limit: int = Query(default=5, ge=1, le=10)):
+        if len(q.strip()) < 2:
+            return {"suggestions": []}
+        rows = request.app.state.corpus.search(q, limit)["entries"]
+        return {"suggestions": list(dict.fromkeys(r["english"] for r in rows))}
+
+    @app.get("/word-sense")
+    def word_sense(request: Request, word: str = Query(min_length=1, max_length=500)):
+        result = request.app.state.corpus.search(word)
+        return {"found": bool(result["entries"]), "word": word, "entries": result["entries"],
+                "results": {"Yoruba": result["entries"]}, "total": result["total"]}
+
+    @app.get("/translate")
+    def translate(request: Request, word: str = Query(min_length=1, max_length=500)):
+        # Compatibility endpoint: corpus matches, not generated sentence translation.
+        result = request.app.state.corpus.search(word)
+        return {"found": bool(result["entries"]), "word": word, "entries": result["entries"],
+                "notice": "These are corpus matches, not generated translations."}
+
+    @app.post("/contribute", status_code=201)
+    def contribute(request: Request, contribution: Contribution):
+        if not writable:
+            raise HTTPException(503, "Persistent storage is not configured. Your submission has not been saved.")
+        host = request.client.host if request.client else "unknown"
+        if os.getenv("VERCEL"):
+            host = request.headers.get("x-vercel-forwarded-for") or host
+        client_key = hashlib.sha256(host.encode()).hexdigest()
+        try:
+            if not request.app.state.corpus.allow_submission(client_key):
+                raise HTTPException(429, "Too many submissions. Try again in ten minutes.")
+            result = request.app.state.corpus.contribute(contribution.model_dump())
+        except (sqlite3.Error, psycopg.Error):
+            logger.error("Contribution database operation failed")
+            raise HTTPException(503, "Could not save your submission. Please try again.")
+        return {"success": True, **result, "message": "Saved for review. This is not yet a verified dictionary entry."}
+
+    def authorize(authorization):
+        if not review_token:
+            raise HTTPException(503, "Review access is not configured")
+        if not hmac.compare_digest(authorization.encode(), ("Bearer " + review_token).encode()):
+            raise HTTPException(401, "Review authorization required")
+
+    @app.get("/review/contributions")
+    def queue(request: Request, authorization: str = Header(default=""),
+              limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+        authorize(authorization)
+        return {"contributions": request.app.state.corpus.queue(limit, offset)}
+
+    @app.post("/review/contributions/{ident}")
+    def review(ident: str, decision: Review, request: Request, authorization: str = Header(default="")):
+        authorize(authorization)
+        if not writable:
+            raise HTTPException(503, "Persistent storage is not configured")
+        try:
+            return request.app.state.corpus.review(ident, decision.approve)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    return app
+
+
+app = create_app()
