@@ -1,4 +1,5 @@
-data/
+data/*
+!data/yoruba-lexicon.jsonl
 .venv/
 .git/
 __pycache__/

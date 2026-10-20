@@ -28,8 +28,8 @@
       <div id="examples" class="examples" aria-label="Examples from the loaded corpus"></div>
     </section>
     <section class="metrics" aria-label="Corpus status">
-      <div><strong id="entry-count">—</strong><span>Yoruba translation pairs</span></div>
-      <div><strong id="reviewed-count">—</strong><span>Editor-reviewed pairs</span></div>
+      <div><strong id="entry-count">—</strong><span>Yoruba language records</span></div>
+      <div><strong id="reviewed-count">—</strong><span>Editor-reviewed senses</span></div>
       <div><strong id="pending-count">—</strong><span>Contributions awaiting review</span></div>
     </section>
     <p id="corpus-breakdown" class="hint"></p>
@@ -66,10 +66,11 @@
         <article><h3>Sources stay visible</h3><p>Each record shows its available source information. Some recovered records have only artifact-level provenance; missing upstream attribution and licences are explicitly unknown.</p></article>
         <article><h3>Context before claims</h3><p>Corpus phrases are not automatically dictionary definitions, usage examples, or generated translations. Editor review is separate from native-speaker verification.</p></article>
       </div>
-      <p class="hint">No bulk dataset export is offered here. Upstream licences must be audited before redistribution. The public lookup API is documented at <a href="/openapi.json">/openapi.json</a>.</p>
+      <p class="hint">No bulk dataset export is offered here. Upstream licences must be audited before redistribution. Dictionary definitions and included usage examples are adapted from English Wiktionary contributors via Wiktextract / Kaikki under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. <a href="/attribution">Read source attribution and changes</a>. The public lookup API is documented at <a href="/openapi.json">/openapi.json</a>.</p>
       <details id="editor"><summary>Editor review</summary>
         <p>Authorized editors can review pending submissions. This marks an entry as editor-reviewed, not native-speaker verified.</p>
         <form id="review-form"><label for="review-token">Editor access token<input id="review-token" type="password" autocomplete="off" required></label><button class="secondary">Load review queue</button></form>
+        <form id="sense-filter-form" hidden><label for="sense-filter">Find dictionary senses to review<input id="sense-filter" type="search" maxlength="500" placeholder="English meaning or Yoruba headword"></label><button class="secondary">Find senses</button></form>
         <p id="review-status" role="status"></p><div id="review-queue"></div>
       </details>
     </section>

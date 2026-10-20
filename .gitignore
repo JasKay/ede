@@ -15,3 +15,6 @@ __pycache__/
 .env*
 
 !vercel.json
+
+data/*
+!data/yoruba-lexicon.jsonl

@@ -29,14 +29,37 @@ function sourceNode(source) {
   } catch { /* Source names are usually dataset identifiers, not URLs. */ }
   return element("span", source);
 }
+function senseContent(sense) {
+  const block = element("section", undefined, "dictionary-sense");
+  const labels = { source_imported: "Source imported · awaiting Ede review", editor_reviewed: "Editor reviewed · not native-speaker verified", needs_correction: "Flagged for correction" };
+  block.append(element("p", labels[sense.review_status] || labels.source_imported, sense.review_status === "needs_correction" ? "error" : "sense-status"));
+  block.append(element("h4", sense.pos + " · " + sense.glosses.join(" → ")));
+  if (sense.labels.length) block.append(element("p", "Source labels: " + sense.labels.join(", "), "metadata"));
+  for (const note of sense.usage_notes || []) block.append(element("p", "Source usage note: " + note, "metadata"));
+  for (const example of sense.examples || []) {
+    const quote = element("blockquote", undefined, "usage-example");
+    const yoruba = element("p", example.yoruba); yoruba.lang = "yo";
+    quote.append(yoruba, element("p", example.english, "example-english"));
+    block.append(quote);
+  }
+  if (!sense.examples.length) block.append(element("p", "No sourced usage example in this extract.", "metadata"));
+  const attribution = element("p", sense.attribution + " · ", "metadata");
+  for (const [name, url] of [["Source entry", sense.source], ["Contributors & history", sense.history], ["CC BY-SA 4.0", sense.license_url]]) {
+    const link = sourceNode(url); link.textContent = name;
+    attribution.append(link, document.createTextNode(" · "));
+  }
+  block.append(attribution, element("p", "Adapted source data; extraction can contain errors. No endorsement by Wiktionary or Kaikki.", "metadata"));
+  return block;
+}
 function entryCard(entry) {
   const card = element("article", undefined, "entry");
   const heading = element("div", undefined, "entry-heading");
   heading.append(element("h3", entry.english), element("span",
-    entry.status === "editor_reviewed" ? "Editor reviewed" : "Imported · unverified", "badge"));
+    (entry.senses || []).length ? "Dictionary source" : entry.status === "editor_reviewed" ? "Editor reviewed" : "Imported · unverified", "badge"));
   const translation = element("p", entry.translation, "translation"); translation.lang = "yo";
   card.append(heading, translation);
-  card.append(element("p", entry.entry_kind === "word" ? "Single-word corpus pair" : "Phrase or sentence record", "metadata"));
+  for (const sense of entry.senses || []) card.append(senseContent(sense));
+  card.append(element("p", (entry.senses || []).length ? "Sourced dictionary headword" : entry.entry_kind === "word" ? "Single-word corpus pair" : "Phrase or sentence record", "metadata"));
   if (entry.entry_kind === "phrase") {
     const detail = element("details");
     detail.append(element("summary", "Explore individual words"));
@@ -79,8 +102,8 @@ async function loadStats() {
   try {
     const data = await request("/stats");
     $("entry-count").textContent = data.total_entries.toLocaleString();
-    $("corpus-breakdown").textContent = data.word_entries.toLocaleString() + " single-word pairs and " + data.phrase_entries.toLocaleString() + " phrase or sentence pairs. Word boundaries are not proof of a verified meaning.";
-    $("reviewed-count").textContent = data.editor_reviewed.toLocaleString();
+    $("corpus-breakdown").textContent = data.dictionary_headwords.toLocaleString() + " sourced dictionary headwords ? " + data.dictionary_senses.toLocaleString() + " senses ? " + data.word_entries.toLocaleString() + " word records ? " + data.phrase_entries.toLocaleString() + " longer corpus records.";
+    $("reviewed-count").textContent = data.reviewed_senses.toLocaleString();
     $("pending-count").textContent = data.pending_contributions.toLocaleString();
     status("data-status", data.data_errors.length ? "Some corpus files could not be imported. Loaded records are searchable; an operator should inspect the import errors." :
       data.ready ? "Counts reflect the loaded corpus. Imported records have not been verified by native speakers." :
@@ -155,7 +178,7 @@ let reviewToken = "";
 async function loadQueue() {
   const data = await request("/review/contributions", { headers: { Authorization: "Bearer " + reviewToken } });
   $("review-queue").replaceChildren();
-  status("review-status", data.contributions.length ? "Showing up to 50 pending submissions. Refresh after reviewing this batch." : "No pending submissions.");
+  status("review-status", data.contributions.length + " community suggestions in this batch.");
   for (const item of data.contributions) {
     const card = element("article", undefined, "entry");
     card.append(element("h3", item.english + " → " + item.translation));
@@ -182,10 +205,40 @@ async function loadQueue() {
     }
     $("review-queue").append(card);
   }
+  $("sense-filter-form").hidden = false;
+  const dictionary = await request("/review/senses?" + new URLSearchParams({ q: $("sense-filter").value.trim() }), { headers: { Authorization: "Bearer " + reviewToken } });
+  $("review-queue").append(element("h3", "Dictionary senses awaiting editor review"));
+  for (const sense of dictionary.senses) {
+    const card = element("article", undefined, "entry");
+    card.append(element("h3", sense.yoruba + " — " + sense.english), senseContent(sense));
+    for (const approve of [true, false]) {
+      const button = element("button", approve ? "Mark this sense reviewed" : "Flag for correction", "secondary");
+      button.type = "button";
+      button.addEventListener("click", async () => {
+        card.querySelectorAll("button").forEach(b => { b.disabled = true; });
+        try {
+          await request("/review/senses/" + encodeURIComponent(sense.id), {
+            method: "POST", headers: { Authorization: "Bearer " + reviewToken }, body: JSON.stringify({ approve })
+          });
+          await loadQueue(); await loadStats();
+        } catch (error) {
+          status("review-status", error.message, "error");
+          card.querySelectorAll("button").forEach(b => { b.disabled = false; });
+        }
+      });
+      card.append(button, document.createTextNode(" "));
+    }
+    $("review-queue").append(card);
+  }
+
 }
 $("review-form").addEventListener("submit", async event => {
   event.preventDefault(); reviewToken = $("review-token").value; $("review-token").value = "";
   try { await loadQueue(); } catch (error) { reviewToken = ""; status("review-status", error.message, "error"); }
+});
+$("sense-filter-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  try { await loadQueue(); } catch (error) { status("review-status", error.message, "error"); }
 });
 const initial = new URLSearchParams(location.search).get("q");
 if (initial) $("query").value = initial;

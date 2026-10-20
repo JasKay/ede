@@ -118,3 +118,39 @@ The build recovers the pinned legacy corpus artifact. Imports are transactional,
 Editor credentials are environment-specific. The production editor token is stored locally under EDE_PRODUCTION_REVIEW_TOKEN in the git-ignored .env.local file; it is not public frontend configuration. The corresponding deployed secret is EDE_REVIEW_TOKEN. Do not commit or share these values. Re-pulling development envs can overwrite local-only keys, so preserve the production editor token securely before doing that.
 
 Run the optional database contracts by setting EDE_TEST_DATABASE_URL to a direct/unpooled PostgreSQL connection, then pytest. Tests create and clean up their own random ede_test_ schemas. Never run these contracts with credentials that lack permission to create isolated test schemas. Test representations redact connection strings and tracebacks use the short format.
+
+## Attributed dictionary expansion
+
+The repository includes data/yoruba-lexicon.jsonl: an adapted CC-BY-SA-4.0
+snapshot of 3,918 Yoruba headwords and 5,803 lexical senses from English
+Wiktionary via Wiktextract / Kaikki, with 1,179 eligible usage examples.
+Read NOTICE.md for attribution, source links, extraction dates, licence scope
+and selection changes. This does not clear the older corpus's unknown licences.
+
+tools/build_lexicon.py rebuilds this file from a local copy of the pinned
+Kaikki source; its SHA-256 is checked before transformation. Canonical forms
+preserve source tone marks. Ambiguous canonical forms, proper names,
+nonlexical/form-only records and quotations are excluded. Dialect facts are
+not inferred from etymologies; original source labels and usage notes remain
+visible. No generated usage examples or numeric confidence scores are added.
+
+Each dictionary sense has separate provenance, part of speech, glosses,
+source examples and review_status. source_imported is not Ede verification.
+Editor review changes only that sense to editor_reviewed or needs_correction;
+it never marks a native speaker as having verified it. Existing community
+contribution review remains separate.
+
+Authenticated API:
+- GET /review/senses?limit=20&offset=0
+- POST /review/senses/{id} with {"approve": true} to mark editor review
+- POST /review/senses/{id} with {"approve": false} to flag for correction
+
+Both use the same private Bearer editor token as the community queue.
+The Our data ? Editor review screen shows dictionary senses alongside
+community suggestions. Source changes and flagged meanings should be checked
+by a qualified Yoruba speaker; the automated importer is not a substitute
+for linguistic review. Review labels do not imply Wiktionary endorsement.
+
+Public GET /attribution serves the data notice. Dictionary text carries its
+source licence and credit links per sense; the application code is not
+automatically relicensed by this data notice.

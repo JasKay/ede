@@ -79,9 +79,17 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
                 except (ValueError, KeyError, TypeError, OSError) as error:
                     logger.exception("Corpus import failed: %s", path.name)
                     app.state.data_errors.append(path.name)
+        lexical_path = data_dir / "yoruba-lexicon.jsonl"
+        if lexical_path.is_file():
+            from lexicon import import_snapshot
+            try:
+                import_snapshot(app.state.corpus, lexical_path)
+            except (ValueError, KeyError, TypeError, OSError):
+                logger.error("Dictionary snapshot import failed")
+                app.state.data_errors.append(lexical_path.name)
         yield
 
-    app = FastAPI(title="Ede Yoruba Corpus API", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Ede Yoruba Corpus API", version="0.4.0", lifespan=lifespan, docs_url=None, redoc_url=None)
 
     @app.middleware("http")
     async def headers(request, call_next):
@@ -114,6 +122,10 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
     @app.get("/static/{name}", include_in_schema=False)
     def static(name: Literal["app.js", "style.css"]):
         return FileResponse(ROOT / "static" / name)
+
+    @app.get("/attribution", include_in_schema=False)
+    def attribution():
+        return FileResponse(ROOT / "NOTICE.md", media_type="text/plain")
 
     @app.get("/stats")
     def stats(request: Request):
@@ -198,6 +210,24 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
             raise HTTPException(503, "Persistent storage is not configured")
         try:
             return request.app.state.corpus.review(ident, decision.approve)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.get("/review/senses")
+    def source_queue(request: Request, authorization: str = Header(default=""), q: str = Query(default="", max_length=500),
+                     limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+        authorize(authorization)
+        from lexicon import queue
+        return {"senses": queue(request.app.state.corpus, limit, offset, q)}
+
+    @app.post("/review/senses/{ident}")
+    def source_review(ident: str, decision: Review, request: Request, authorization: str = Header(default="")):
+        authorize(authorization)
+        if not writable:
+            raise HTTPException(503, "Persistent storage is not configured")
+        from lexicon import review
+        try:
+            return review(request.app.state.corpus, ident, decision.approve)
         except ValueError as error:
             raise HTTPException(404, str(error))
 

@@ -74,6 +74,12 @@ class Corpus:
                     context TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL,
                     created_at TEXT NOT NULL, reviewed_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS lexical_senses (
+                    id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, payload TEXT NOT NULL,
+                    review_status TEXT NOT NULL, reviewed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS lexical_entry_lookup ON lexical_senses(entry_id);
+                CREATE INDEX IF NOT EXISTS lexical_review_lookup ON lexical_senses(review_status);
                 CREATE TABLE IF NOT EXISTS rate_limits (
                     client_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, requests INTEGER NOT NULL
                 );
@@ -164,12 +170,13 @@ class Corpus:
             raise ValueError("Unsupported corpus format")
 
     @staticmethod
-    def public_entry(row):
+    def public_entry(row, senses=None):
         entry = dict(row)
         entry.pop("english_key")
         entry.pop("translation_key")
         entry["sources"] = json.loads(entry["sources"])
         entry["examples"] = json.loads(entry["examples"])
+        entry["senses"] = senses or []
         entry["confidence"] = None
         entry["native_speaker_verified"] = False
         entry["redistribution_cleared"] = False
@@ -193,10 +200,12 @@ class Corpus:
                 order = r"CASE WHEN english_key=? OR translation_key=? THEN 0 WHEN english_key LIKE ? ESCAPE '\' THEN 1 ELSE 2 END, length(english), english_key, id"
                 params.extend([key, key, pattern[1:]])
             else:
-                order = "english_key, id"
+                order = "CASE WHEN domain='dictionary' THEN 0 ELSE 1 END, translation_key, english_key, id" if kind == "word" else "english_key, id"
             rows = db.execute("SELECT * FROM entries WHERE " + where + " ORDER BY " + order + " LIMIT ? OFFSET ?",
                               tuple(params + [limit, offset])).fetchall()
-        return {"entries": [self.public_entry(r) for r in rows], "total": total,
+            from lexicon import enrich
+            sense_map = enrich(db, [r["id"] for r in rows])
+        return {"entries": [self.public_entry(r, sense_map.get(r["id"], [])) for r in rows], "total": total,
                 "limit": limit, "offset": offset, "kind": kind}
 
     def stats(self):
@@ -204,10 +213,13 @@ class Corpus:
             total = db.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
             words = db.execute("SELECT COUNT(*) FROM entries WHERE entry_kind='word'").fetchone()[0]
             reviewed = db.execute("SELECT COUNT(*) FROM entries WHERE status='editor_reviewed'").fetchone()[0]
+            lexical = db.execute("SELECT COUNT(*) FROM lexical_senses").fetchone()[0]
+            dictionary_words = db.execute("SELECT COUNT(DISTINCT translation_key) FROM entries WHERE id IN (SELECT entry_id FROM lexical_senses)").fetchone()[0]
+            reviewed_senses = db.execute("SELECT COUNT(*) FROM lexical_senses WHERE review_status='editor_reviewed'").fetchone()[0]
             pending = db.execute("SELECT COUNT(*) FROM contributions WHERE status='pending'").fetchone()[0]
             examples = [r[0] for r in db.execute("SELECT english FROM entries WHERE entry_kind='word' AND english_key != translation_key GROUP BY english ORDER BY length(english), english LIMIT 4")]
             imports = [dict(r) for r in db.execute("SELECT filename, imported_at, records FROM imports ORDER BY imported_at")]
-        return {"word_entries": words, "phrase_entries": total - words, "total_entries": total, "languages": {"Yoruba": total}, "editor_reviewed": reviewed,
+        return {"dictionary_headwords": dictionary_words, "dictionary_senses": lexical, "reviewed_senses": reviewed_senses, "word_entries": words, "phrase_entries": total - words, "total_entries": total, "languages": {"Yoruba": total}, "editor_reviewed": reviewed,
                 "native_speaker_verified": 0, "pending_contributions": pending,
                 "examples": examples, "imports": imports, "ready": total > 0}
 

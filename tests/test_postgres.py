@@ -70,3 +70,25 @@ def test_postgres_concurrent_imports_are_idempotent(remote):
     with ThreadPoolExecutor(max_workers=3) as pool:
         assert sum(pool.map(run, range(3))) == 2
     assert corpus.stats()["total_entries"] == 2
+
+def test_postgres_sourced_sense_preserves_legacy_licence_and_review_separation(remote):
+    from lexicon import import_snapshot, review, queue
+    corpus, url, source = remote
+    corpus.import_file(source)
+    metadata = {"id": "pg-sense", "english": "water", "yoruba": "omi", "pos": "noun",
+                "glosses": ["water"], "labels": [], "usage_notes": [], "examples": [],
+                "source": "https://en.wiktionary.org/wiki/omi#Yoruba",
+                "history": "https://en.wiktionary.org/w/index.php?title=omi&action=history",
+                "license": "CC-BY-SA-4.0"}
+    lexical = source.parent / "lexical.jsonl"
+    lexical.write_text(json.dumps(metadata) + "\n")
+    assert import_snapshot(corpus, lexical) == 0
+    assert len(queue(corpus)) == 1
+    result = PostgresCorpus(url).search("water")["entries"][0]
+    assert result["license"] == "unknown"
+    assert result["senses"][0]["license"] == "CC-BY-SA-4.0"
+    review(corpus, "pg-sense", True)
+    result = PostgresCorpus(url).search("water")["entries"][0]
+    assert result["senses"][0]["review_status"] == "editor_reviewed"
+    assert result["native_speaker_verified"] is False
+    assert corpus.stats()["total_entries"] == 2

@@ -19,7 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.fill("#query", stats.examples[0]);
     await page.click("#search-button");
     await page.waitForSelector("#results .entry");
-    assert.match(await page.locator("#results").innerText(), /Imported · unverified/);
+    assert.match(await page.locator("#results").innerText(), /Imported \u00b7 unverified|Dictionary source/);
     assert.match(await page.locator("#results").innerText(), /Confidence: not established/);
     assert.match(await page.locator("#results").innerText(), /Sources:/);
     const title = await page.locator("#results .entry h3").first().innerText();
@@ -48,12 +48,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.match(await page.locator("#review-queue").innerText(), /<img src=x onerror=alert\(1\)>/);
     assert.equal(await page.locator("#review-queue img").count(), 0);
     await page.getByRole("button", { name: "Approve as editor-reviewed" }).click();
-    await page.waitForFunction(() => document.querySelector("#review-status").textContent === "No pending submissions.");
+    await page.waitForFunction(() => document.querySelector("#review-status").textContent.includes("0 community suggestions"));
     await page.fill("#query", "Ede browser test record");
     await page.click("#search-button");
     await page.waitForSelector("#results .entry");
     assert.match(await page.locator("#results").innerText(), /Editor reviewed/);
     assert.match(await page.locator("#results").innerText(), /Native-speaker verification: not established/);
+    if (stats.dictionary_senses > 0) {
+      await page.getByRole("button", { name: "Mark this sense reviewed" }).first().click();
+      await page.waitForFunction(() => document.querySelector("#reviewed-count").textContent === "1");
+      const afterReview = await (await context.request.get(base + "/stats")).json();
+      assert.equal(afterReview.reviewed_senses, 1);
+      assert.equal(afterReview.native_speaker_verified, 0);
+    }
     // A server failure must not clear the user's unsaved text or claim success.
     await page.fill("#english", "Unsaved browser example");
     await page.fill("#yoruba", "Retained text");
