@@ -5,3 +5,5 @@
 .dictionary-sense{border-left:2px solid #526d56;padding:0 0 0 18px;margin:22px 0}.dictionary-sense h4{font-size:16px;line-height:1.6;margin:10px 0}.sense-status{font-size:11px;color:var(--green)}.usage-example{border-left:2px solid var(--amber);margin:16px 0;padding:0 16px}.usage-example p{margin:5px 0}.example-english{font-size:14px;color:var(--muted)}
 
 #word-index{padding:35px 0 55px;border-top:1px solid var(--line)}#index-form{max-width:500px}#headword-list{margin-bottom:20px}#word-detail{margin-top:25px}
+
+.review-paging{display:flex;gap:12px;margin:24px 0}#portal-login{max-width:500px}#queue-controls{max-width:650px}#portal-queue label{display:block;margin:15px 0}#portal-queue{overflow-wrap:anywhere}

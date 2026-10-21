@@ -46,7 +46,26 @@ class Contribution(BaseModel):
 
 
 class Review(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     approve: bool
+    note: str = Field(default="", max_length=1000)
+
+
+class SynonymProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sense_id: str = Field(min_length=1, max_length=100)
+    target: str = Field(min_length=1, max_length=150)
+    source: str = Field(min_length=1, max_length=500)
+    note: str = Field(default="", max_length=1000)
+
+
+    @field_validator("sense_id", "target", "source")
+    @classmethod
+    def required_text(cls, value):
+        value = value.strip()
+        if not value or any(ord(char) < 32 for char in value):
+            raise ValueError("Provide a nonempty text value without control characters")
+        return value
 
 
 def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
@@ -119,8 +138,13 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
     def index():
         return FileResponse(ROOT / "index.html")
 
+    @app.get("/review", include_in_schema=False)
+    @app.get("/review/", include_in_schema=False)
+    def review_portal():
+        return FileResponse(ROOT / "review.html")
+
     @app.get("/static/{name}", include_in_schema=False)
-    def static(name: Literal["app.js", "style.css"]):
+    def static(name: Literal["app.js", "review.js", "style.css"]):
         return FileResponse(ROOT / "static" / name)
 
     @app.get("/attribution", include_in_schema=False)
@@ -215,6 +239,7 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
             raise HTTPException(503, "Review access is not configured")
         if not hmac.compare_digest(authorization.encode(), ("Bearer " + review_token).encode()):
             raise HTTPException(401, "Review authorization required")
+        return "editor-key:" + hashlib.sha256(review_token.encode()).hexdigest()[:12]
 
     @app.get("/review/contributions")
     def queue(request: Request, authorization: str = Header(default=""),
@@ -224,31 +249,75 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
 
     @app.post("/review/contributions/{ident}")
     def review(ident: str, decision: Review, request: Request, authorization: str = Header(default="")):
-        authorize(authorization)
+        actor = authorize(authorization)
         if not writable:
             raise HTTPException(503, "Persistent storage is not configured")
         try:
-            return request.app.state.corpus.review(ident, decision.approve)
+            return request.app.state.corpus.review(ident, decision.approve, actor, decision.note)
         except ValueError as error:
             raise HTTPException(404, str(error))
 
     @app.get("/review/senses")
     def source_queue(request: Request, authorization: str = Header(default=""), q: str = Query(default="", max_length=500),
-                     limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+                     limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000),
+                     status: Literal["source_imported", "needs_correction", "editor_reviewed"] = "source_imported"):
         authorize(authorization)
         from lexicon import queue
-        return {"senses": queue(request.app.state.corpus, limit, offset, q)}
+        return {"senses": queue(request.app.state.corpus, limit, offset, q, status)}
 
     @app.post("/review/senses/{ident}")
     def source_review(ident: str, decision: Review, request: Request, authorization: str = Header(default="")):
-        authorize(authorization)
+        actor = authorize(authorization)
         if not writable:
             raise HTTPException(503, "Persistent storage is not configured")
         from lexicon import review
         try:
-            return review(request.app.state.corpus, ident, decision.approve)
+            return review(request.app.state.corpus, ident, decision.approve, actor, decision.note)
         except ValueError as error:
             raise HTTPException(404, str(error))
+
+    @app.get("/review/summary")
+    def review_summary(request: Request, authorization: str = Header(default="")):
+        actor = authorize(authorization)
+        from relations import summary
+        return {**summary(request.app.state.corpus), "actor": actor, "writable": writable}
+
+    @app.get("/review/history")
+    def review_history(request: Request, authorization: str = Header(default=""),
+                       limit: int = Query(default=30, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000)):
+        authorize(authorization)
+        from relations import history
+        return {"actions": history(request.app.state.corpus, limit, offset)}
+
+    @app.get("/review/synonyms")
+    def synonym_queue(request: Request, authorization: str = Header(default=""), q: str = Query(default="", max_length=500),
+                      limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000),
+                      status: Literal["pending", "approved", "rejected"] = "pending"):
+        authorize(authorization)
+        from relations import queue
+        return queue(request.app.state.corpus, limit, offset, q, status)
+
+    @app.post("/review/synonyms", status_code=201)
+    def propose_synonym(proposal: SynonymProposal, request: Request, authorization: str = Header(default="")):
+        actor = authorize(authorization)
+        if not writable:
+            raise HTTPException(503, "Persistent storage is not configured")
+        from relations import propose
+        try:
+            return propose(request.app.state.corpus, proposal.sense_id, proposal.target, proposal.source, proposal.note, actor)
+        except ValueError as error:
+            raise HTTPException(422, str(error))
+
+    @app.post("/review/synonyms/{ident}")
+    def review_synonym(ident: str, decision: Review, request: Request, authorization: str = Header(default="")):
+        actor = authorize(authorization)
+        if not writable:
+            raise HTTPException(503, "Persistent storage is not configured")
+        from relations import review
+        try:
+            return review(request.app.state.corpus, ident, decision.approve, actor, decision.note)
+        except ValueError as error:
+            raise HTTPException(409, str(error))
 
     return app
 

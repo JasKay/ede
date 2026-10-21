@@ -80,6 +80,18 @@ class Corpus:
                 );
                 CREATE INDEX IF NOT EXISTS lexical_entry_lookup ON lexical_senses(entry_id);
                 CREATE INDEX IF NOT EXISTS lexical_review_lookup ON lexical_senses(review_status);
+                CREATE TABLE IF NOT EXISTS synonym_relations (
+                    id TEXT PRIMARY KEY, sense_id TEXT NOT NULL, target TEXT NOT NULL,
+                    target_key TEXT NOT NULL, provenance TEXT NOT NULL, status TEXT NOT NULL,
+                    created_at TEXT NOT NULL, reviewed_at TEXT,
+                    UNIQUE(sense_id, target_key)
+                );
+                CREATE INDEX IF NOT EXISTS synonym_status_lookup ON synonym_relations(status, sense_id);
+                CREATE TABLE IF NOT EXISTS review_actions (
+                    id TEXT PRIMARY KEY, record_type TEXT NOT NULL, record_id TEXT NOT NULL,
+                    decision TEXT NOT NULL, actor TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS review_record_lookup ON review_actions(record_type, record_id, created_at);
                 CREATE TABLE IF NOT EXISTS rate_limits (
                     client_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, requests INTEGER NOT NULL
                 );
@@ -243,7 +255,7 @@ class Corpus:
             return [dict(r) for r in db.execute(
                 "SELECT * FROM contributions WHERE status='pending' ORDER BY created_at LIMIT ? OFFSET ?", (limit, offset))]
 
-    def review(self, ident, approve):
+    def review(self, ident, approve, actor="legacy-editor", note=""):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM contributions WHERE id=?", (ident,)).fetchone()
@@ -268,6 +280,8 @@ class Corpus:
                         "editor_reviewed", "[]", utcnow(), entry_kind(row["english"], row["translation"])))
             status = "approved" if approve else "rejected"
             db.execute("UPDATE contributions SET status=?, reviewed_at=? WHERE id=?", (status, utcnow(), ident))
+            from relations import audit
+            audit(db, "contribution", ident, status, actor, note)
         return {"id": ident, "status": status}
 
     def allow_submission(self, client_key):

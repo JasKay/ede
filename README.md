@@ -166,3 +166,16 @@ The sourced headword index groups meanings under exact NFC-normalized Yoruba hea
 - /?headword=...#word-index: shareable word lookup.
 
 Yoruba work remains: audit source coverage, curate missing meanings and examples, support accountable speaker review, and obtain licensed pronunciation recordings. Do not interpret a large record count as a complete dictionary. Swahili is the next planned language; legacy Swahili ingestion scripts are not a live or verified Swahili dictionary. Its launch needs separately licensed sources, language-specific validation and review, and language-scoped storage/search before importing any data.
+
+
+## Reviewer portal and synonyms
+
+Open /review for the dedicated portal. Sign in with the existing EDE_REVIEW_TOKEN (the owner keeps its production value privately in .env.local as EDE_PRODUCTION_REVIEW_TOKEN). Share the key only with authorized editors over a private channel. The public page contains no queue data; every data/action endpoint requires the bearer key, and the browser keeps it in tab memory only. Sign out clears the loaded records. This release has a shared editor credential, not individual accounts or native-speaker credentials. Decisions record the credential fingerprint, timestamp and optional note in review_actions; no key value is stored there.
+
+New submissions automatically appear in New word suggestions. Source meanings and flagged meanings have separate paginated queues. A flag can be resolved as reviewed after checking the reference; edits to the source text should be submitted through the existing correction form, not silently overwritten. Decision history records actions from this release onward, not fabricated historical identities.
+
+Explicit sense-level synonyms in the checksum-pinned Wiktionary extract become pending proposals, preserving usage/dialect tags as source qualifiers. Word-level synonym lists without a reliable sense mapping are excluded. The import is idempotent and never resets review decisions. Editors can also suggest a single-word synonym against a specific sense, supplying evidence and context. Approve/reject is a separate action. Only approved relationships appear in public search and word details; they are scoped to the source meaning, not assumed interchangeable across all senses or automatically mirrored to a target meaning. Flagged meanings suppress public synonym links until resolved. An absent target dictionary entry does not imply a definition or a verified spelling. No LLM-generated synonym is presented as fact.
+
+Protected API additions: GET /review/summary, GET /review/history, GET/POST /review/synonyms and POST /review/synonyms/{id}. Existing decision bodies now accept an optional note. GET /review/senses?status=needs_correction lists flagged meanings. The same writable-storage guards apply to every mutation.
+
+The Approved synonyms queue can withdraw a previously approved relation; withdrawal hides it immediately and records the reason in decision history. Target meanings can be opened for comparison without assuming the target has just one sense.

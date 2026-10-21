@@ -57,6 +57,8 @@ def test_invalid_licence_rolls_back_the_entire_import_and_flags_are_visible(tmp_
     import_snapshot(corpus, path)
     review(corpus, "test-sense", False)
     assert corpus.search("fixtureword")["entries"][0]["senses"][0]["review_status"] == "needs_correction"
+    # Flagged meanings can now be resolved through the reviewer portal.
+    review(corpus, "test-sense", True)
     with pytest.raises(ValueError):
         review(corpus, "test-sense", True)
 
@@ -65,7 +67,8 @@ def test_builder_preserves_canonical_tones_and_excludes_quotations_and_ambiguity
     source = tmp_path / "input.jsonl"
     data = {"lang_code": "yo", "word": "test", "pos": "verb",
             "forms": [{"form": "t\u00e8st", "tags": ["canonical"]}],
-            "senses": [{"id": "sense", "glosses": ["test meaning"], "examples": [
+            "synonyms": [{"word": "unmapped"}],
+            "senses": [{"id": "sense", "glosses": ["test meaning"], "synonyms": [{"word": "another", "tags": ["regional"]}], "examples": [
                 {"type": "quotation", "text": "do not copy", "english": "do not copy"},
                 {"type": "example", "ref": "External author", "text": "omit", "english": "omit"},
                 {"type": "example", "text": "test example", "english": "fixture example"}]}]}
@@ -79,6 +82,7 @@ def test_builder_preserves_canonical_tones_and_excludes_quotations_and_ambiguity
     assert result[0]["yoruba"] == "t\u00e8st"
     assert len(result[0]["examples"]) == 1
     assert result[0]["history"].startswith("https://en.wiktionary.org/")
+    assert result[0]["synonyms"] == [{"word": "another", "tags": ["regional"], "raw_tags": []}]
 
 
 def test_sense_review_requires_editor_authorization_and_preserves_source_fields(tmp_path):

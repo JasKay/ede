@@ -43,6 +43,18 @@ function senseContent(sense) {
     block.append(quote);
   }
   if (!sense.examples.length) block.append(element("p", "No sourced usage example in this extract.", "metadata"));
+  if (sense.synonyms?.length) {
+    block.append(element("h4", "Synonyms for this meaning"));
+    for (const synonym of sense.synonyms) {
+      const row = element("p"); const link = element("a", synonym.word); link.lang = "yo";
+      link.href = "/?" + new URLSearchParams({ q: synonym.word, kind: "word" });
+      row.append(link, document.createTextNode(" - editor reviewed")); block.append(row);
+      if (synonym.provenance.qualifiers?.length) block.append(element("p", "Usage: " + synonym.provenance.qualifiers.join(", "), "metadata"));
+      if (synonym.provenance.note) block.append(element("p", synonym.provenance.note, "metadata"));
+      block.append(sourceNode(synonym.provenance.source));
+      if (synonym.provenance.attribution) block.append(element("p", synonym.provenance.attribution + " | " + synonym.provenance.license, "metadata"));
+    }
+  }
   const attribution = element("p", sense.attribution + " · ", "metadata");
   for (const [name, url] of [["Source entry", sense.source], ["Contributors & history", sense.history], ["CC BY-SA 4.0", sense.license_url]]) {
     const link = sourceNode(url); link.textContent = name;

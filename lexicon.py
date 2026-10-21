@@ -16,6 +16,7 @@ def import_snapshot(corpus, path):
             return 0
         existing = {r["id"]: dict(r) for r in db.execute("SELECT id, sources FROM entries").fetchall()}
         senses = {r[0] for r in db.execute("SELECT id FROM lexical_senses").fetchall()}
+        relations = {r[0] for r in db.execute("SELECT id FROM synonym_relations").fetchall()}
         count = 0
         for record in records:
             if record["license"] != "CC-BY-SA-4.0" or not record["source"].startswith("https://en.wiktionary.org/wiki/"):
@@ -41,6 +42,9 @@ def import_snapshot(corpus, path):
                 db.execute("INSERT INTO lexical_senses VALUES (?,?,?,?,?)",
                            (record["id"], ident, json.dumps(record, ensure_ascii=False), "source_imported", None))
                 senses.add(record["id"])
+            from relations import import_synonyms
+            import_synonyms(db, record, relations)
+
         db.execute("INSERT INTO imports VALUES (?,?,?,?)", (digest, Path(path).name, utcnow(), count))
     return count
 
@@ -55,31 +59,39 @@ def enrich(db, entry_ids):
         payload = json.loads(row["payload"])
         payload.update(review_status=row["review_status"], reviewed_at=row["reviewed_at"])
         result.setdefault(row["entry_id"], []).append(payload)
+    from relations import approved_in_db
+    all_senses = [sense for values in result.values() for sense in values]
+    synonyms = approved_in_db(db, [sense["id"] for sense in all_senses])
+    for sense in all_senses:
+        sense["synonyms"] = synonyms.get(sense["id"], [])
+
     return result
 
 
-def queue(corpus, limit=20, offset=0, query=""):
-    where = "review_status='source_imported'"
-    params = []
+def queue(corpus, limit=20, offset=0, query="", status="source_imported"):
+    where = "review_status=?"
+    params = [status]
     if query.strip():
         key = normalize(query)
         pattern = "%" + key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         where += r" AND entry_id IN (SELECT id FROM entries WHERE english_key LIKE ? ESCAPE '\' OR translation_key LIKE ? ESCAPE '\')"
         params.extend([pattern, pattern])
     with corpus.connect() as db:
-        rows = db.execute("SELECT * FROM lexical_senses WHERE " + where + " ORDER BY id LIMIT ? OFFSET ?",
+        rows = db.execute("SELECT *, (SELECT note FROM review_actions WHERE record_type='sense' AND record_id=lexical_senses.id ORDER BY created_at DESC, id LIMIT 1) AS review_note FROM lexical_senses WHERE " + where + " ORDER BY id LIMIT ? OFFSET ?",
                           tuple(params + [limit, offset])).fetchall()
-    return [{**json.loads(row["payload"]), "review_status": row["review_status"]} for row in rows]
+    return [{**json.loads(row["payload"]), "review_status": row["review_status"], "review_note": row["review_note"], "synonyms": []} for row in rows]
 
 
-def review(corpus, ident, approve):
+def review(corpus, ident, approve, actor="legacy-editor", note=""):
     status = "editor_reviewed" if approve else "needs_correction"
     with corpus.connect() as db:
         db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT * FROM lexical_senses WHERE id=? AND review_status='source_imported'", (ident,)).fetchone()
-        if not row:
+        row = db.execute("SELECT * FROM lexical_senses WHERE id=? AND review_status IN ('source_imported', 'needs_correction', 'editor_reviewed')", (ident,)).fetchone()
+        if not row or row["review_status"] == status:
             raise ValueError("Unreviewed dictionary sense not found")
         db.execute("UPDATE lexical_senses SET review_status=?, reviewed_at=? WHERE id=?", (status, utcnow(), ident))
+        from relations import audit
+        audit(db, "sense", ident, status, actor, note)
     return {"id": ident, "status": status}
 
 
@@ -104,6 +116,10 @@ def word(corpus, headword):
         rows = db.execute("SELECT s.* FROM lexical_senses s JOIN entries e ON e.id=s.entry_id WHERE e.translation_key=? ORDER BY s.id",
                           (normalize(headword.strip()),)).fetchall()
     senses = [{**json.loads(row["payload"]), "review_status": row["review_status"], "reviewed_at": row["reviewed_at"]} for row in rows]
+    from relations import approved
+    synonyms = approved(corpus, [s["id"] for s in senses])
+    for sense in senses:
+        sense["synonyms"] = synonyms.get(sense["id"], [])
     return {"headword": senses[0]["yoruba"] if senses else headword, "senses": senses,
             "native_speaker_verified": False}
 

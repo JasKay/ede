@@ -41,3 +41,5 @@ unknown attribution/licence labels remain intact. Bulk corpus export remains dis
 Wiktextract reference:
 Tatu Ylonen, "Wiktextract: Wiktionary as Machine-Readable Structured Data",
 LREC 2022, pp. 1317–1325.
+
+Sense-level synonym annotations from the same pinned source are retained as review proposals, with source qualifiers and attribution. Multiword annotations and self-links are excluded. No relation is automatically Ede-approved; approved links retain their source licence and attribution.

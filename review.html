@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Ede - Reviewer portal</title>
+<link rel="stylesheet" href="/static/style.css"><script src="/static/review.js" defer></script></head>
+<body><a class="skip" href="#portal">Skip to review</a>
+<header class="wrap topbar"><a class="brand" href="/">ede<span>REVIEWER PORTAL</span></a><nav aria-label="Main navigation"><a href="/">Dictionary</a><button id="sign-out" class="secondary" hidden>Sign out</button></nav></header>
+<main id="portal" class="wrap"><section class="hero"><p class="eyebrow">BUILD THE DICTIONARY TOGETHER</p><h1>Every meaning<br><em>deserves a review.</em></h1>
+<p class="intro">Review new words, check sourced meanings and assess synonym relationships in their specific context.</p>
+<form id="portal-login"><label for="access-key">Editor access key<input id="access-key" type="password" autocomplete="off" required></label><button>Open reviewer portal</button></form>
+<p class="hint">Ask the Ede owner for the editor access key. It stays in memory for this tab and is cleared on sign out or reload. A shared key identifies the credential, not an individual reviewer.</p>
+<p id="portal-status" role="status"></p></section>
+<section id="workspace" hidden>
+<p id="portal-summary" class="hint"></p>
+<form id="queue-controls" class="search-controls"><label for="queue-type">Review queue<select id="queue-type"><option value="contributions">New word suggestions</option><option value="senses">Sourced meanings</option><option value="reviewed">Reviewed meanings</option><option value="flagged">Meanings flagged for correction</option><option value="synonyms">Synonym proposals</option><option value="approved-synonyms">Approved synonyms</option><option value="history">Decision history</option></select></label>
+<label for="queue-query">Find a word or meaning<input id="queue-query" type="search" maxlength="500"></label><button>Refresh queue</button></form>
+<p id="batch-status" role="status"></p><div id="portal-queue"></div>
+<div class="review-paging"><button id="queue-back" class="secondary" hidden>Previous batch</button><button id="queue-next" class="secondary" hidden>Next batch</button></div>
+<p class="hint">Approval records editor review, not native-speaker verification. Synonyms apply to a particular meaning; dialect and usage qualifiers must be checked. A flagged meaning hides its approved synonym links until resolved.</p>
+</section></main></body></html>

@@ -106,3 +106,24 @@ def test_postgres_headword_index_and_coverage(remote):
     assert headwords(corpus, "%")["total"] == 0
     assert word(corpus, "OMI")["senses"][0]["id"] == "pg-index"
     assert coverage(corpus)["headwords_without_examples"] == 1
+
+
+def test_postgres_synonym_review_and_audit_contract(remote):
+    from lexicon import import_snapshot, word
+    from relations import queue, review, history
+    corpus, url, source = remote
+    metadata = {"id": "pg-synonym", "english": "fixture", "yoruba": "fixtureword", "pos": "noun",
+                "glosses": ["fixture"], "examples": [], "source": "https://en.wiktionary.org/wiki/test#Yoruba",
+                "history": "https://en.wiktionary.org/w/index.php?title=test&action=history", "license": "CC-BY-SA-4.0",
+                "license_url": "https://creativecommons.org/licenses/by-sa/4.0/", "attribution": "Synthetic test",
+                "synonyms": [{"word": "fixtureother", "tags": ["test qualifier"]}]}
+    lexical = source.parent / "synonyms.jsonl"
+    lexical.write_text(json.dumps(metadata) + "\n")
+    import_snapshot(corpus, lexical)
+    item = queue(corpus)["synonyms"][0]
+    assert not word(corpus, "fixtureword")["senses"][0]["synonyms"]
+    review(corpus, item["id"], True, "test-credential", "Test approval")
+    restarted = PostgresCorpus(url)
+    assert word(restarted, "fixtureword")["senses"][0]["synonyms"][0]["word"] == "fixtureother"
+    assert history(restarted)[0]["note"] == "Test approval"
+    assert queue(restarted)["total"] == 0

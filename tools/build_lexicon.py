@@ -59,6 +59,8 @@ def build(source, destination):
                 "glosses": glosses, "labels": list(dict.fromkeys(sense.get("tags", []) + sense.get("raw_tags", []))),
                 "usage_notes": sense.get("raw_glosses", []), "dialect": "unspecified",
                 "examples": examples[:5], "source": page, "history": history,
+                "synonyms": [{"word": item["word"], "tags": item.get("tags", []), "raw_tags": item.get("raw_tags", [])}
+                             for item in sense.get("synonyms", []) if isinstance(item.get("word"), str)],
                 "source_title": row["word"], "license": "CC-BY-SA-4.0", "license_url": LICENSE,
                 "attribution": "English Wiktionary contributors; extracted by Wiktextract / kaikki.org",
                 "extract_url": SOURCE, "extract_sha256": EXPECTED,
@@ -68,7 +70,7 @@ def build(source, destination):
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("".join(json.dumps(output[key], ensure_ascii=False, sort_keys=True) + "\n"
-                                   for key in sorted(output)), encoding="utf-8")
+                                   for key in sorted(output)), encoding="utf-8", newline="\n")
     print("Senses:", len(output), "Distinct headwords:", len({normalize(r["yoruba"]) for r in output.values()}),
           "Usage examples:", sum(len(r["examples"]) for r in output.values()))
 
