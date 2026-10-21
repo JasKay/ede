@@ -98,3 +98,35 @@ def test_sense_review_requires_editor_authorization_and_preserves_source_fields(
         assert client.get("/stats").json()["reviewed_senses"] == 1
         assert client.get("/stats").json()["native_speaker_verified"] == 0
         assert client.get("/attribution").status_code == 200
+
+
+def test_headword_index_groups_senses_and_reports_real_gaps(tmp_path):
+    directory = tmp_path / "data"
+    directory.mkdir()
+    accented = "\u1eb9\u0300ka"
+    snapshot(directory / "yoruba-lexicon.jsonl",
+             record(id="a", yoruba=accented),
+             record(id="b", yoruba=accented, english="second meaning", examples=[]),
+             record(id="c", yoruba="eka", english="another meaning", examples=[]),
+             record(id="d", yoruba="percent%word", examples=[]))
+    with TestClient(create_app(tmp_path / "db.sqlite", directory)) as client:
+        index = client.get("/dictionary/headwords", params={"limit": 1}).json()
+        assert index["total"] == 3
+        assert len(index["headwords"]) == 1
+        page2 = client.get("/dictionary/headwords", params={"limit": 1, "offset": 1}).json()
+        assert index["headwords"] != page2["headwords"]
+        exact = client.get("/dictionary/word", params={"headword": accented.upper()}).json()
+        assert len(exact["senses"]) == 2
+        assert exact["native_speaker_verified"] is False
+        assert len(client.get("/dictionary/word", params={"headword": "eka"}).json()["senses"]) == 1
+        assert client.get("/dictionary/word", params={"headword": "missing"}).status_code == 404
+        assert client.get("/dictionary/headwords", params={"prefix": "%"}).json()["total"] == 0
+        assert client.get("/dictionary/headwords", params={"prefix": "percent%"}).json()["total"] == 1
+        assert client.get("/dictionary/headwords", params={"limit": 101}).status_code == 422
+        data = client.get("/dictionary/coverage").json()
+        assert data["headwords"] == 3
+        assert data["senses"] == 4
+        assert data["headwords_without_examples"] == 2
+        assert data["usage_examples"] == 1
+        assert data["awaiting_review"] == 4
+        assert data["completeness_percent"] is None

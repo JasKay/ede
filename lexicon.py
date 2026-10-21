@@ -81,3 +81,49 @@ def review(corpus, ident, approve):
             raise ValueError("Unreviewed dictionary sense not found")
         db.execute("UPDATE lexical_senses SET review_status=?, reviewed_at=? WHERE id=?", (status, utcnow(), ident))
     return {"id": ident, "status": status}
+
+
+def headwords(corpus, prefix="", limit=30, offset=0):
+    """Browse sourced headwords only; never infer meanings from corpus pairs."""
+    key = normalize(prefix.strip())
+    pattern = key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    where = "EXISTS (SELECT 1 FROM lexical_senses s WHERE s.entry_id=e.id)"
+    if key:
+        where += r" AND translation_key LIKE ? ESCAPE '\'"
+    params = (pattern,) if key else ()
+    with corpus.connect() as db:
+        total = db.execute("SELECT COUNT(DISTINCT translation_key) FROM entries e WHERE " + where, params).fetchone()[0]
+        rows = db.execute("SELECT translation_key, MIN(translation) AS headword, COUNT(*) AS meaning_records FROM entries e WHERE " + where +
+                          " GROUP BY translation_key ORDER BY translation_key LIMIT ? OFFSET ?", params + (limit, offset)).fetchall()
+    return {"headwords": [dict(row) for row in rows], "total": total, "offset": offset, "limit": limit,
+            "ordering": "Unicode order; prefix matching preserves tone marks and underdots"}
+
+
+def word(corpus, headword):
+    with corpus.connect() as db:
+        rows = db.execute("SELECT s.* FROM lexical_senses s JOIN entries e ON e.id=s.entry_id WHERE e.translation_key=? ORDER BY s.id",
+                          (normalize(headword.strip()),)).fetchall()
+    senses = [{**json.loads(row["payload"]), "review_status": row["review_status"], "reviewed_at": row["reviewed_at"]} for row in rows]
+    return {"headword": senses[0]["yoruba"] if senses else headword, "senses": senses,
+            "native_speaker_verified": False}
+
+
+def coverage(corpus):
+    with corpus.connect() as db:
+        rows = db.execute("SELECT payload, review_status FROM lexical_senses").fetchall()
+    words, with_examples = set(), set()
+    examples = reviewed = flagged = 0
+    for row in rows:
+        sense = json.loads(row["payload"])
+        key = normalize(sense["yoruba"])
+        words.add(key)
+        if sense.get("examples"):
+            with_examples.add(key)
+        examples += len(sense.get("examples", []))
+        reviewed += row["review_status"] == "editor_reviewed"
+        flagged += row["review_status"] == "needs_correction"
+    return {"language": "Yoruba", "headwords": len(words), "senses": len(rows), "usage_examples": examples,
+            "headwords_with_examples": len(with_examples), "headwords_without_examples": len(words - with_examples),
+            "reviewed_senses": reviewed, "flagged_senses": flagged, "awaiting_review": len(rows) - reviewed - flagged,
+            "completeness_percent": None,
+            "notice": "No complete inventory of Yoruba words has been established. Coverage counts are not a completeness score. Pronunciation audio and native-speaker verification are not yet available."}

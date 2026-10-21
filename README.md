@@ -154,3 +154,15 @@ for linguistic review. Review labels do not imply Wiktionary endorsement.
 Public GET /attribution serves the data notice. Dictionary text carries its
 source licence and credit links per sense; the application code is not
 automatically relicensed by this data notice.
+
+
+## Yoruba dictionary coverage and Swahili sequencing
+
+The sourced headword index groups meanings under exact NFC-normalized Yoruba headwords, preserving tone marks and underdots. Its Unicode ordering is not a Yoruba linguistic collation. Legacy corpus pairs are excluded from this index.
+
+- GET /dictionary/headwords?prefix=...&limit=30&offset=0: bounded, literal prefix browsing.
+- GET /dictionary/word?headword=...: all attributed senses for an exact headword, or 404.
+- GET /dictionary/coverage: measured examples and review gaps; no invented completeness percentage.
+- /?headword=...#word-index: shareable word lookup.
+
+Yoruba work remains: audit source coverage, curate missing meanings and examples, support accountable speaker review, and obtain licensed pronunciation recordings. Do not interpret a large record count as a complete dictionary. Swahili is the next planned language; legacy Swahili ingestion scripts are not a live or verified Swahili dictionary. Its launch needs separately licensed sources, language-specific validation and review, and language-scoped storage/search before importing any data.

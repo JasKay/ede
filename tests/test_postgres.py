@@ -92,3 +92,17 @@ def test_postgres_sourced_sense_preserves_legacy_licence_and_review_separation(r
     assert result["senses"][0]["review_status"] == "editor_reviewed"
     assert result["native_speaker_verified"] is False
     assert corpus.stats()["total_entries"] == 2
+
+def test_postgres_headword_index_and_coverage(remote):
+    from lexicon import import_snapshot, headwords, word, coverage
+    corpus, url, source = remote
+    metadata = {"id": "pg-index", "english": "water", "yoruba": "omi", "pos": "noun",
+                "glosses": ["water"], "examples": [], "source": "https://en.wiktionary.org/wiki/omi#Yoruba",
+                "history": "https://en.wiktionary.org/w/index.php?title=omi&action=history", "license": "CC-BY-SA-4.0"}
+    lexical = source.parent / "index.jsonl"
+    lexical.write_text(json.dumps(metadata) + "\n")
+    import_snapshot(corpus, lexical)
+    assert headwords(corpus, "o")["total"] == 1
+    assert headwords(corpus, "%")["total"] == 0
+    assert word(corpus, "OMI")["senses"][0]["id"] == "pg-index"
+    assert coverage(corpus)["headwords_without_examples"] == 1

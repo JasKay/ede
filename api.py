@@ -154,6 +154,25 @@ def create_app(db_path=None, data_dir=None, review_token=None, writable=None):
                limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000)):
         return request.app.state.corpus.search("", limit, offset, kind)
 
+    @app.get("/dictionary/headwords")
+    def dictionary_index(request: Request, prefix: str = Query(default="", max_length=100),
+                         limit: int = Query(default=30, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000000)):
+        from lexicon import headwords
+        return headwords(request.app.state.corpus, prefix, limit, offset)
+
+    @app.get("/dictionary/word")
+    def dictionary_word(request: Request, headword: str = Query(min_length=1, max_length=500)):
+        from lexicon import word
+        result = word(request.app.state.corpus, headword)
+        if not result["senses"]:
+            raise HTTPException(404, "No sourced dictionary headword found; tone marks and underdots are preserved")
+        return result
+
+    @app.get("/dictionary/coverage")
+    def dictionary_coverage(request: Request):
+        from lexicon import coverage
+        return coverage(request.app.state.corpus)
+
     @app.get("/search-suggestions")
     def suggestions(request: Request, q: str = Query(max_length=100), limit: int = Query(default=5, ge=1, le=10)):
         if len(q.strip()) < 2:

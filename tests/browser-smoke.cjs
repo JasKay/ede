@@ -24,6 +24,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.match(await page.locator("#results").innerText(), /Sources:/);
     const title = await page.locator("#results .entry h3").first().innerText();
     const translation = await page.locator("#results .translation").first().innerText();
+    await page.waitForSelector("#headword-list button");
+    const firstHeadword = await page.locator("#headword-list button").first().innerText();
+    await page.locator("#headword-list button").first().click();
+    await page.waitForSelector("#word-detail .dictionary-sense");
+    assert.equal(await page.locator("#word-detail h3").innerText(), firstHeadword);
+    assert.match(await page.locator("#word-detail a").first().getAttribute("href"), /headword=/);
+    await page.waitForFunction(() => document.querySelector("#coverage-status").textContent.includes("without sourced examples"));
+    await page.fill("#headword-prefix", "%");
+    await page.locator("#index-form button").click();
+    await page.waitForFunction(() => document.querySelector("#index-status").textContent.startsWith("0 of 0"));
     // Correcting an actual corpus record must open a prefilled form.
     await page.locator("#results .entry button").first().click();
     assert.equal(await page.inputValue("#english"), title);

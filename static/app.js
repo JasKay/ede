@@ -245,3 +245,49 @@ if (initial) $("query").value = initial;
 const initialKind = new URLSearchParams(location.search).get("kind");
 if (["word", "phrase", "all"].includes(initialKind)) $("record-kind").value = initialKind;
 loadStats().then(() => search(false));
+
+let indexOffset = 0, indexPrefix = "", indexVersion = 0;
+async function browseHeadwords(more = false) {
+  const version = ++indexVersion;
+  if (!more) { indexOffset = 0; indexPrefix = $("headword-prefix").value.trim(); $("headword-list").replaceChildren(); }
+  $("index-more").hidden = true;
+  status("index-status", "Loading words...");
+  try {
+    const data = await request("/dictionary/headwords?" + new URLSearchParams({ prefix: indexPrefix, offset: indexOffset, limit: 30 }));
+    if (version !== indexVersion) return;
+    for (const item of data.headwords) {
+      const button = element("button", item.headword);
+      button.type = "button"; button.lang = "yo";
+      button.addEventListener("click", () => openHeadword(item.headword));
+      $("headword-list").append(button);
+    }
+    indexOffset += data.headwords.length;
+    status("index-status", indexOffset + " of " + data.total + " sourced headwords" + (data.total ? "" : ". Try another prefix, preserving tone marks."));
+    $("index-more").hidden = indexOffset >= data.total;
+  } catch (error) { if (version === indexVersion) status("index-status", error.message, "error"); }
+}
+let wordVersion = 0;
+async function openHeadword(headword) {
+  const version = ++wordVersion;
+  $("word-detail").replaceChildren(element("p", "Loading meanings..."));
+  try {
+    const data = await request("/dictionary/word?" + new URLSearchParams({ headword }));
+    if (version !== wordVersion) return;
+    const card = element("article", undefined, "entry");
+    const title = element("h3", data.headword, "translation"); title.lang = "yo";
+    card.append(title, element("p", data.senses.length + " sourced senses. Review status is shown for each meaning.", "hint"));
+    const link = element("a", "Link to this word");
+    link.href = "/?" + new URLSearchParams({ headword: data.headword }) + "#word-index";
+    card.append(link);
+    for (const sense of data.senses) card.append(senseContent(sense));
+    $("word-detail").replaceChildren(card);
+  } catch (error) { if (version === wordVersion) $("word-detail").replaceChildren(element("p", error.message, "error")); }
+}
+$("index-form").addEventListener("submit", event => { event.preventDefault(); browseHeadwords(); });
+$("index-more").addEventListener("click", () => browseHeadwords(true));
+browseHeadwords();
+request("/dictionary/coverage").then(data => {
+  status("coverage-status", data.headwords.toLocaleString() + " headwords; " + data.headwords_without_examples.toLocaleString() + " without sourced examples; " + data.awaiting_review.toLocaleString() + " senses awaiting editor review; " + data.flagged_senses.toLocaleString() + " flagged for correction. " + data.notice);
+}).catch(error => status("coverage-status", error.message, "error"));
+const linkedHeadword = new URLSearchParams(location.search).get("headword");
+if (linkedHeadword) openHeadword(linkedHeadword);

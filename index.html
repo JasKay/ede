@@ -40,6 +40,19 @@
       <div id="results"></div>
       <button id="more" class="secondary" hidden>Load more matches</button>
     </section>
+    <section id="word-index" aria-labelledby="index-heading">
+      <p class="eyebrow">THE YORUBA DICTIONARY</p>
+      <h2 id="index-heading">Explore words, meaning by meaning.</h2>
+      <p class="hint">Sourced headwords only. Open a word to see its meanings together. Prefix matching keeps tone marks and underdots; the list uses Unicode order.</p>
+      <form id="index-form"><label for="headword-prefix">Headword starts with<input id="headword-prefix" maxlength="100" placeholder="Enter a Yoruba letter or prefix"></label><button>Browse words</button></form>
+      <p id="index-status" role="status"></p>
+      <div id="headword-list" class="examples"></div>
+      <button id="index-more" class="secondary" hidden>More words</button>
+      <div id="word-detail" aria-live="polite"></div>
+      <h3>What still needs work</h3>
+      <p id="coverage-status" role="status">Loading dictionary coverage...</p>
+      <p class="hint">Yoruba comes first. Swahili is planned after the Yoruba sourcing, review and dictionary workflows are established.</p>
+    </section>
     <section id="contribute" class="contribution-panel">
       <div>
         <p class="eyebrow">HELP BUILD THE RECORD</p>
